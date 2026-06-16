@@ -27,7 +27,7 @@ try {
 } catch (\PDOException $e) {
     // NUNCA mostrar el error real en producción
     error_log('DB Error: ' . $e->getMessage());
-    die("Error de conexión. Intenta más tarde.");
+    die("Error de conexión real: " . $e->getMessage());
 }
 
 // CORRECCIÓN CRÍTICA: Usar AES-256-CBC con IV aleatorio en lugar de AES-128-ECB
