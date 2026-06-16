@@ -746,11 +746,14 @@ function sendFile(input) {
   const file = input.files[0];
   if(!file) return;
   document.getElementById('attach-menu').classList.remove('open');
+  showToast('Subiendo...');
   const fd = new FormData();
   fd.append('archivo', file);
   if(replyTo) fd.append('reply_to', replyTo);
-  fetch('ajax.php?action=send', {method:'POST', body:fd})
-    .then(()=>{ loadMessages(); cancelReply(); input.value=''; });
+  fetch('ajax.php?action=send&contact_id=' + PARTNER, {method:'POST', body:fd})
+    .then(r=>r.json())
+    .then(d=>{ if(d.status==='ok'){ loadMessages(); cancelReply(); } else showToast(d.error||'Error','error'); input.value=''; })
+    .catch(()=>showToast('Error al subir','error'));
 }
 
 /* ── EMOJI PICKER ──────────────────────────────────────────────────── */
@@ -784,7 +787,6 @@ function onInputChange(ta) {
   ta.style.height = 'auto';
   ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
   const hasText = ta.value.trim().length > 0;
-  /* FIX 3 y 4: mostrar avión al escribir, ocultar audio */
   document.getElementById('send-btn').style.display  = hasText ? 'flex' : 'none';
   document.getElementById('audio-btn').style.display = hasText ? 'none' : 'flex';
 }
@@ -797,16 +799,27 @@ let mediaRec = null, audioChunks = [], isRecording = false;
 function toggleAudio() { isRecording ? stopRecording() : startRecording(); }
 function startRecording() {
   navigator.mediaDevices.getUserMedia({audio:true}).then(stream => {
-    mediaRec = new MediaRecorder(stream);
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+                   : MediaRecorder.isTypeSupported('audio/webm')             ? 'audio/webm'
+                   : MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')  ? 'audio/ogg;codecs=opus'
+                   : MediaRecorder.isTypeSupported('audio/mp4')              ? 'audio/mp4'
+                   : '';
+    const opts = mimeType ? {mimeType} : {};
+    mediaRec = new MediaRecorder(stream, opts);
     audioChunks = [];
-    mediaRec.ondataavailable = e => audioChunks.push(e.data);
+    mediaRec.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); };
     mediaRec.onstop = () => {
-      const blob = new Blob(audioChunks, {type:'audio/webm'});
-      const file = new File([blob], 'audio_'+Date.now()+'.webm', {type:'audio/webm'});
+      const ext  = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'm4a' : 'webm';
+      const type = mimeType || 'audio/webm';
+      const blob = new Blob(audioChunks, {type});
+      const file = new File([blob], 'audio_' + Date.now() + '.' + ext, {type});
       const fd   = new FormData();
       fd.append('archivo', file);
       if(replyTo) fd.append('reply_to', replyTo);
-      fetch('ajax.php?action=send', {method:'POST', body:fd}).then(()=>{ loadMessages(); cancelReply(); });
+      fetch('ajax.php?action=send&contact_id=' + PARTNER, {method:'POST', body:fd})
+        .then(r=>r.json())
+        .then(d=>{ if(d.status==='ok'){ loadMessages(); cancelReply(); } else showToast(d.error||'Error audio','error'); })
+        .catch(()=>showToast('Error al enviar audio','error'));
       stream.getTracks().forEach(t=>t.stop());
     };
     mediaRec.start();
@@ -833,19 +846,22 @@ function sendMessage() {
   input.style.height = 'auto';
   onInputChange(input);
   cancelReply();
-  fetch('ajax.php?action=send', {method:'POST', body:fd})
+  fetch('ajax.php?action=send&contact_id=' + PARTNER, {method:'POST', body:fd})
     .then(r=>r.json())
-    .then(data => { if(data.status==='ok') loadMessages(); })
+    .then(data => { if(data.status==='ok') loadMessages(); else showToast(data.error||'Error','error'); })
     .catch(()=>showToast('Error al enviar','error'));
 }
 
 /* ── LOAD MESSAGES ─────────────────────────────────────────────────── */
 let lastCount = 0;
 function loadMessages() {
-  const q = encodeURIComponent(document.getElementById('search-input')?.value || '');
-  fetch(`ajax.php?action=fetch&search=${q}`)
-  .then(r => r.json())
+  fetch('ajax.php?action=fetch&contact_id=' + PARTNER)
+  .then(r => {
+    if(!r.ok) return [];
+    return r.json().catch(()=>[]);
+  })
   .then(msgs => {
+    if(!Array.isArray(msgs)) return;
     const box    = document.getElementById('chat-box');
     const atBot  = box.scrollHeight - box.scrollTop - box.clientHeight < 100;
 
