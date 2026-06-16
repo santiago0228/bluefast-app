@@ -592,7 +592,8 @@ const PARTNER = <?= $partner_id ?>;
 const BUBBLE  = '<?= addslashes($bubble_color) ?>';
 
 /* ── PEERJS ────────────────────────────────────────────────────────── */
-const peer = new Peer('blufast_' + ME);
+const _peerRandSuffix = Math.random().toString(36).slice(2,10);
+const peer = new Peer('bf_' + ME + '_' + _peerRandSuffix);
 let localStream, currentCall;
 
 peer.on('open', id => {
