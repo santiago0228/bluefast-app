@@ -1,0 +1,16 @@
+{
+  "name": "blufast Messaging",
+  "short_name": "blufast",
+  "start_url": "index.php",
+  "display": "standalone",
+  "background_color": "#0B0B0F",
+  "theme_color": "#121216",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/512/512222.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
