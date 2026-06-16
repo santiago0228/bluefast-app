@@ -1,9 +1,10 @@
 FROM php:8.2-apache
 
-# Instalamos pdo_mysql directamente
+# Instalamos el driver de MySQL
 RUN docker-php-ext-install pdo pdo_mysql
 
-# Esto es lo único necesario para copiar tu código
-COPY . /var/www/html/
+# Configuramos Apache para que escuche en el puerto 8080
+RUN sed -i 's/80/8080/g' /etc/apache2/sites-available/000-default.conf /etc/apache2/ports.conf
 
-# No necesitamos EXPOSE ni configuraciones extra de MPM
+# Copiamos tu código
+COPY . /var/www/html/
