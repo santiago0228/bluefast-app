@@ -8,13 +8,14 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-$host    = 'sql308.infinityfree.com';
-$db      = 'if0_42192275_blufast'; // Asegúrate de cambiar el XXX por 'blufast'
-$user    = 'if0_42192275';
-$pass    = 'FlWxwA82LR4';         // ¡Aquí debes poner tu contraseña!
+// Corrección: Usamos el nombre de la variable de entorno configurada en Railway
+$host = getenv('MYSQLHOST') ?: 'localhost';
+$user = getenv('MYSQLUSER') ?: 'root';
+$pass = getenv('MYSQLPASSWORD') ?: '';
+$db   = getenv('MYSQLDATABASE') ?: 'blufast';
+$port = getenv('MYSQLPORT') ?: '3306';
 $charset = 'utf8mb4';
-
-$dsn = "mysql:host=$host;dbname=$db;charset=$charset";
+$dsn = "mysql:host=$host;port=$port;dbname=$db;charset=$charset";
 $options = [
     PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
