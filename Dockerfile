@@ -11,3 +11,6 @@ COPY . /var/www/html/
 
 # Ajustamos permisos para que no haya problemas de lectura
 RUN chown -R www-data:www-data /var/www/html
+
+# Arreglamos el error "More than one MPM loaded" en Railway
+CMD ["bash", "-lc", "set -eux; a2dismod mpm_event mpm_worker || true; rm -f /etc/apache2/mods-enabled/mpm_event.* /etc/apache2/mods-enabled/mpm_worker.* || true; a2enmod mpm_prefork; apache2ctl -t; exec apache2-foreground"]
