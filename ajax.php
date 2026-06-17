@@ -31,7 +31,7 @@ const ALLOWED_MIME = [
     'application/pdf',
     'audio/mpeg', 'audio/ogg',
 ];
-const ALLOWED_EXT = ['jpg','jpeg','png','webp','gif','mp4','webm','pdf','mp3','ogg'];
+const ALLOWED_EXT  = ['jpg','jpeg','png','webp','gif','mp4','webm','pdf','mp3','ogg'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 function subirArchivo(array $file, string $prefijo = ''): ?string {
@@ -94,7 +94,6 @@ if ($action === 'send') {
             echo json_encode(['error' => 'Archivo no válido o demasiado grande']);
             exit;
         }
-        $mime = (new finfo(FILEINFO_MIME_TYPE))->file($_FILES['archivo']['tmp_name']);
         $ext  = strtolower(pathinfo($archivo_url, PATHINFO_EXTENSION));
         $tipo = in_array($ext, ['jpg','jpeg','png','webp','gif']) ? 'imagen'
                : (in_array($ext, ['mp4','webm'])                 ? 'video'
@@ -133,7 +132,7 @@ if ($action === 'send') {
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// 2. FETCH MENSAJES
+// 2. FETCH MENSAJES  (con reacciones agregadas)
 // ────────────────────────────────────────────────────────────────────────
 if ($action === 'fetch') {
     if (!verificarAccesoConversacion($pdo, $user_id, $partner_id)) {
@@ -142,30 +141,69 @@ if ($action === 'fetch') {
         exit;
     }
 
-    // CORRECCIÓN: LIMIT con entero directo en query para evitar error SQL con PDO
     $limit  = min((int) ($_GET['limit'] ?? 50), 100);
     $before = isset($_GET['before_id']) ? (int) $_GET['before_id'] : PHP_INT_MAX;
 
     $stmt = $pdo->prepare("
-        SELECT id, remitente_id, destinatario_id, contenido, tipo, archivo_url, created_at, reply_to
-        FROM mensajes
-        WHERE ((remitente_id = ? AND destinatario_id = ?)
-            OR (remitente_id = ? AND destinatario_id = ?))
-          AND id < ?
-        ORDER BY id DESC
+        SELECT m.id, m.remitente_id, m.destinatario_id, m.contenido, m.tipo, m.archivo_url, m.created_at, m.reply_to,
+               rm.contenido AS reply_contenido, ru.nombre AS reply_user
+        FROM mensajes m
+        LEFT JOIN mensajes rm ON rm.id = m.reply_to
+        LEFT JOIN usuarios ru ON ru.id = rm.remitente_id
+        WHERE ((m.remitente_id = ? AND m.destinatario_id = ?)
+            OR (m.remitente_id = ? AND m.destinatario_id = ?))
+          AND m.id < ?
+        ORDER BY m.id DESC
         LIMIT $limit
     ");
     $stmt->execute([$user_id, $partner_id, $partner_id, $user_id, $before]);
     $rows = array_reverse($stmt->fetchAll());
 
-    foreach ($rows as &$m) {
-        $m['id']              = (int) $m['id'];
-        $m['remitente_id']    = (int) $m['remitente_id'];
-        $m['destinatario_id'] = (int) $m['destinatario_id'];
-        if ($m['contenido'])  $m['contenido'] = descifrar($m['contenido']);
-        if ($m['reply_to'])   $m['reply_to']  = (int) $m['reply_to'];
+    // Cargar reacciones de todos los mensajes en una sola query
+    if (!empty($rows)) {
+        $ids = array_column($rows, 'id');
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+
+        // Reacciones agrupadas
+        $stmtR = $pdo->prepare("
+            SELECT mensaje_id, emoji, COUNT(*) as total
+            FROM reacciones
+            WHERE mensaje_id IN ($placeholders)
+            GROUP BY mensaje_id, emoji
+        ");
+        $stmtR->execute($ids);
+        $reactions = [];
+        foreach ($stmtR->fetchAll() as $r) {
+            $reactions[(int)$r['mensaje_id']][] = [
+                'emoji' => $r['emoji'],
+                'total' => (int)$r['total']
+            ];
+        }
+
+        // Mi reacción
+        $stmtMy = $pdo->prepare("
+            SELECT mensaje_id, emoji FROM reacciones
+            WHERE mensaje_id IN ($placeholders) AND usuario_id = ?
+        ");
+        $stmtMy->execute(array_merge($ids, [$user_id]));
+        $myReactions = [];
+        foreach ($stmtMy->fetchAll() as $r) {
+            $myReactions[(int)$r['mensaje_id']] = $r['emoji'];
+        }
+
+        foreach ($rows as &$m) {
+            $m['id']              = (int) $m['id'];
+            $m['remitente_id']    = (int) $m['remitente_id'];
+            $m['destinatario_id'] = (int) $m['destinatario_id'];
+            if ($m['contenido'])      $m['contenido']      = descifrar($m['contenido']);
+            if ($m['reply_contenido'])$m['reply_texto']    = descifrar($m['reply_contenido']);
+            if ($m['reply_to'])       $m['reply_to']       = (int) $m['reply_to'];
+            $m['reacciones']  = $reactions[(int)$m['id']] ?? [];
+            $m['my_reaction'] = $myReactions[(int)$m['id']] ?? null;
+            unset($m['reply_contenido']);
+        }
+        unset($m);
     }
-    unset($m);
 
     echo json_encode($rows);
     exit;
@@ -210,20 +248,30 @@ if ($action === 'upload_story') {
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// 4. FETCH HISTORIAS
+// 4. FETCH HISTORIAS  (solo de contactos mutuos + propias)
 // ────────────────────────────────────────────────────────────────────────
 if ($action === 'fetch_stories') {
+    // Traer historias de: yo mismo + contactos que me tienen (bidireccional)
     $stmt = $pdo->prepare('
         SELECT h.id, h.usuario_id, h.imagen_url, h.created_at,
                u.username, u.nombre, u.avatar_url
         FROM historias h
         JOIN usuarios u ON h.usuario_id = u.id
-        WHERE h.created_at >= NOW() - INTERVAL 24 HOUR
+        WHERE h.created_at >= NOW() - INTERVAL 48 HOUR
+          AND (
+              h.usuario_id = ?
+              OR h.usuario_id IN (
+                  SELECT c.contacto_id FROM contactos c WHERE c.usuario_id = ?
+                  UNION
+                  SELECT c2.usuario_id FROM contactos c2 WHERE c2.contacto_id = ?
+              )
+          )
         ORDER BY h.created_at DESC
         LIMIT 200
     ');
-    $stmt->execute();
+    $stmt->execute([$user_id, $user_id, $user_id]);
     $rows = $stmt->fetchAll();
+
     foreach ($rows as &$r) {
         $r['id']         = (int) $r['id'];
         $r['usuario_id'] = (int) $r['usuario_id'];
@@ -289,7 +337,42 @@ if ($action === 'delete_msg') {
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// 8. REACCIONAR A MENSAJE
+// 8. ELIMINAR HISTORIA (solo el dueño)
+// ────────────────────────────────────────────────────────────────────────
+if ($action === 'delete_story') {
+    $story_id = (int) ($_POST['story_id'] ?? 0);
+    if (!$story_id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'ID inválido']);
+        exit;
+    }
+
+    // Obtener la URL del archivo antes de borrar
+    $stmtSel = $pdo->prepare('SELECT imagen_url FROM historias WHERE id = ? AND usuario_id = ? LIMIT 1');
+    $stmtSel->execute([$story_id, $user_id]);
+    $story = $stmtSel->fetch();
+
+    if (!$story) {
+        http_response_code(403);
+        echo json_encode(['error' => 'No autorizado o historia no encontrada']);
+        exit;
+    }
+
+    // Borrar de BD
+    $stmt = $pdo->prepare('DELETE FROM historias WHERE id = ? AND usuario_id = ?');
+    $stmt->execute([$story_id, $user_id]);
+
+    // Intentar borrar archivo físico
+    if ($story['imagen_url'] && file_exists($story['imagen_url'])) {
+        @unlink($story['imagen_url']);
+    }
+
+    echo json_encode(['status' => 'ok']);
+    exit;
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// 9. REACCIONAR A MENSAJE
 // ────────────────────────────────────────────────────────────────────────
 if ($action === 'react') {
     $msg_id = (int) ($_POST['msg_id'] ?? 0);
@@ -327,7 +410,7 @@ if ($action === 'react') {
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// 9. BLOQUEAR USUARIO
+// 10. BLOQUEAR USUARIO
 // ────────────────────────────────────────────────────────────────────────
 if ($action === 'block') {
     if ($partner_id === null) {

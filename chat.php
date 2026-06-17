@@ -45,139 +45,90 @@ if($chat_bg) {
 *{-webkit-tap-highlight-color:transparent;box-sizing:border-box;margin:0;padding:0;}
 :root{--bubble:<?= $bubble_color ?>;}
 
-/* ── FIX 1: Layout tipo móvil centrado, nunca ancho completo ────────── */
 html,body{
-  height:100%;
-  width:100%;
-  background:#000;
-  display:flex;
-  justify-content:center;    /* centra horizontalmente */
-  align-items:stretch;
+  height:100%;width:100%;background:#000;
+  display:flex;justify-content:center;align-items:stretch;
 }
 #app{
-  width:100%;
-  max-width:480px;           /* máximo ancho de celular */
-  height:100dvh;
-  display:flex;
-  flex-direction:column;
-  overflow:hidden;
+  width:100%;max-width:480px;height:100dvh;
+  display:flex;flex-direction:column;overflow:hidden;
   background:#0B0B0F;
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  color:#e5e7eb;
-  position:relative;
+  color:#e5e7eb;position:relative;
 }
 
 /* ── SCROLLBAR ──────────────────────────────────────────────────────── */
 #chat-box::-webkit-scrollbar{width:3px;}
 #chat-box::-webkit-scrollbar-thumb{background:#333;border-radius:10px;}
 
-/* ── FIX 2: BURBUJAS izquierda/derecha ─────────────────────────────── */
-.msg-row{
-  display:flex;
-  margin-bottom:3px;
-  padding:0 8px;
-}
-.msg-row.me{
-  justify-content:flex-end;   /* mis mensajes → derecha */
-}
-.msg-row.them{
-  justify-content:flex-start; /* mensajes recibidos → izquierda */
-}
+/* ── BURBUJAS ───────────────────────────────────────────────────────── */
+.msg-row{display:flex;margin-bottom:3px;padding:0 8px;}
+.msg-row.me{justify-content:flex-end;}
+.msg-row.them{justify-content:flex-start;}
 .bubble{
-  max-width:78%;
-  padding:9px 13px;
-  font-size:14px;
-  line-height:1.5;
-  position:relative;
-  word-break:break-word;
+  max-width:78%;padding:9px 13px;font-size:14px;
+  line-height:1.5;position:relative;word-break:break-word;
 }
 .bubble.me{
-  background:var(--bubble);
-  color:#fff;
+  background:var(--bubble);color:#fff;
   border-radius:18px 18px 4px 18px;
 }
 .bubble.them{
-  background:#1e1e28;
-  color:#e5e7eb;
-  border-radius:18px 18px 18px 4px;
-  border:1px solid #2a2a38;
+  background:#1e1e28;color:#e5e7eb;
+  border-radius:18px 18px 18px 4px;border:1px solid #2a2a38;
 }
 
-/* ── CONTEXTO MENÚ (borrar/responder/reaccionar) ───────────────────── */
+/* ── MENÚ CONTEXTUAL ────────────────────────────────────────────────── */
 .ctx-menu{
-  display:none;
-  position:fixed;
-  background:#1a1a26;
-  border:1px solid #2a2a38;
-  border-radius:16px;
-  padding:6px;
-  z-index:500;
-  min-width:180px;
-  box-shadow:0 8px 32px rgba(0,0,0,0.8);
-  flex-direction:column;
-  gap:2px;
+  display:none;position:fixed;
+  background:#1a1a26;border:1px solid #2a2a38;
+  border-radius:16px;padding:6px;z-index:500;
+  min-width:200px;box-shadow:0 8px 32px rgba(0,0,0,0.85);
+  flex-direction:column;gap:2px;
 }
 .ctx-menu.open{display:flex;}
 .ctx-item{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  padding:10px 12px;
-  font-size:13px;
-  cursor:pointer;
-  border-radius:10px;
-  color:#e5e7eb;
-  transition:background .12s;
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;font-size:13px;cursor:pointer;
+  border-radius:10px;color:#e5e7eb;transition:background .12s;
 }
 .ctx-item:hover{background:#2a2a38;}
 .ctx-item.danger{color:#f87171;}
 
-/* ── REACTION PICKER (sobre menú contexto) ─────────────────────────── */
+/* ── REACCIONES RÁPIDAS EN MENÚ ─────────────────────────────────────── */
 .react-row{
-  display:flex;
-  gap:4px;
-  padding:8px 10px;
-  border-bottom:1px solid #2a2a38;
-  justify-content:space-around;
+  display:flex;gap:4px;padding:8px 10px;
+  border-bottom:1px solid #2a2a38;justify-content:space-around;
 }
-.react-opt{font-size:22px;cursor:pointer;padding:3px 4px;border-radius:8px;transition:transform .12s;}
+.react-opt{
+  font-size:22px;cursor:pointer;padding:3px 4px;
+  border-radius:8px;transition:transform .12s;
+}
 .react-opt:hover{transform:scale(1.3);}
 
-/* ── REACTION CHIPS EN BURBUJA ─────────────────────────────────────── */
+/* ── CHIPS DE REACCIÓN ──────────────────────────────────────────────── */
 .reactions-row{display:flex;gap:3px;flex-wrap:wrap;margin-top:4px;padding:0 8px;}
 .reaction-chip{
-  background:rgba(255,255,255,0.1);
-  border-radius:20px;
-  padding:2px 7px;
-  font-size:12px;
-  cursor:pointer;
-  border:1px solid transparent;
-  transition:background .12s;
+  background:rgba(255,255,255,0.1);border-radius:20px;
+  padding:2px 7px;font-size:12px;cursor:pointer;
+  border:1px solid transparent;transition:background .12s;
 }
 .reaction-chip.mine{border-color:var(--bubble);}
 .reaction-chip:hover{background:rgba(255,255,255,0.18);}
 
-/* ── REPLY PREVIEW DENTRO DE BURBUJA ───────────────────────────────── */
+/* ── REPLY PREVIEW BURBUJA ──────────────────────────────────────────── */
 .reply-preview{
-  border-left:3px solid rgba(255,255,255,0.4);
-  padding:4px 8px;
-  border-radius:4px;
-  margin-bottom:6px;
-  background:rgba(0,0,0,0.2);
-  font-size:11px;
-  line-height:1.3;
+  border-left:3px solid rgba(255,255,255,0.4);padding:4px 8px;
+  border-radius:4px;margin-bottom:6px;background:rgba(0,0,0,0.2);
+  font-size:11px;line-height:1.3;
 }
 .bubble.them .reply-preview{border-left-color:var(--bubble);}
 
-/* ── REPLY BAR ─────────────────────────────────────────────────────── */
+/* ── REPLY BAR INPUT ────────────────────────────────────────────────── */
 #reply-bar{
-  display:none;
-  align-items:center;
-  gap:8px;
-  padding:8px 12px;
-  background:#161620;
-  border-top:1px solid #2a2a38;
-  flex-shrink:0;
+  display:none;align-items:center;gap:8px;
+  padding:8px 12px;background:#161620;
+  border-top:1px solid #2a2a38;flex-shrink:0;
 }
 
 /* ── TIMESTAMP ──────────────────────────────────────────────────────── */
@@ -185,129 +136,92 @@ html,body{
 
 /* ── HEADER ─────────────────────────────────────────────────────────── */
 #app-header{
-  background:#111118;
-  border-bottom:1px solid #1e1e28;
-  padding:10px 12px;
-  display:flex;
-  align-items:center;
-  gap:10px;
-  flex-shrink:0;
-  position:relative;
+  background:#111118;border-bottom:1px solid #1e1e28;
+  padding:10px 12px;display:flex;align-items:center;
+  gap:10px;flex-shrink:0;position:relative;
 }
 .icon-btn{
   width:38px;height:38px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
-  cursor:pointer;flex-shrink:0;
-  transition:background .15s;
+  cursor:pointer;flex-shrink:0;transition:background .15s;
   background:transparent;border:none;color:#aaa;
 }
 .icon-btn:hover{background:#2a2a38;}
 .icon-btn svg{width:21px;height:21px;}
 
-/* ── FIX 3 y 4: BARRA DE INPUT ─────────────────────────────────────── */
+/* ── INPUT BAR ──────────────────────────────────────────────────────── */
 #input-bar{
-  padding:8px 10px;
-  background:#111118;
-  border-top:1px solid #1e1e28;
-  display:flex;
-  align-items:flex-end;  /* alinea al fondo para textarea multilinea */
-  gap:6px;
-  flex-shrink:0;
-  position:relative;
+  padding:8px 10px;background:#111118;border-top:1px solid #1e1e28;
+  display:flex;align-items:flex-end;gap:6px;flex-shrink:0;position:relative;
 }
 #msg-input{
-  flex:1;
-  background:#1e1e28;
-  border:1px solid #2a2a38;
-  border-radius:22px;
-  padding:10px 16px;
-  font-size:14px;
-  color:#fff;
-  outline:none;
-  resize:none;
-  max-height:120px;
-  line-height:1.4;
-  font-family:inherit;
+  flex:1;background:#1e1e28;border:1px solid #2a2a38;
+  border-radius:22px;padding:10px 16px;font-size:14px;color:#fff;
+  outline:none;resize:none;max-height:120px;line-height:1.4;font-family:inherit;
 }
 #msg-input::placeholder{color:#555;}
 
-/* FIX 3: Botón enviar con avión apuntando ARRIBA ───────────────────── */
 #send-btn{
-  background:var(--bubble);
-  width:40px;height:40px;
-  border-radius:50%;
-  display:none;           /* oculto hasta que haya texto */
-  align-items:center;
-  justify-content:center;
-  cursor:pointer;
-  flex-shrink:0;
-  border:none;
-  transition:opacity .15s;
+  background:var(--bubble);width:40px;height:40px;border-radius:50%;
+  display:none;align-items:center;justify-content:center;
+  cursor:pointer;flex-shrink:0;border:none;transition:opacity .15s;
 }
 #send-btn:hover{opacity:.85;}
 #send-btn svg{width:20px;height:20px;}
 
-/* FIX 4: Botón audio (visible cuando no hay texto, REEMPLAZA emoji) ── */
-/* El emoji picker se mueve al menú + adjuntar, no junto al input */
 #audio-btn{color:#aaa;}
 #audio-btn.recording{color:#ef4444;animation:pulse 1s infinite;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.5;}}
 
 /* ── MENÚ ADJUNTAR ──────────────────────────────────────────────────── */
 #attach-menu{
-  display:none;
-  position:absolute;
-  bottom:64px;
-  left:10px;
-  background:#1a1a26;
-  border:1px solid #2a2a38;
-  border-radius:16px;
-  padding:8px;
-  gap:4px;
-  flex-direction:column;
-  z-index:200;
-  box-shadow:0 8px 32px rgba(0,0,0,0.6);
-  min-width:190px;
+  display:none;position:absolute;bottom:64px;left:10px;
+  background:#1a1a26;border:1px solid #2a2a38;border-radius:16px;
+  padding:8px;gap:4px;flex-direction:column;z-index:200;
+  box-shadow:0 8px 32px rgba(0,0,0,0.6);min-width:190px;
 }
 #attach-menu.open{display:flex;}
 .attach-btn{
-  display:flex;align-items:center;gap:10px;
-  padding:10px 14px;border-radius:12px;
-  cursor:pointer;font-size:13px;font-weight:500;
+  display:flex;align-items:center;gap:10px;padding:10px 14px;
+  border-radius:12px;cursor:pointer;font-size:13px;font-weight:500;
   transition:background .15s;color:#e5e7eb;
 }
 .attach-btn:hover{background:#2a2a38;}
 
-/* ── EMOJI PICKER (dentro del menú adjuntar) ────────────────────────── */
+/* ── EMOJI PICKER ───────────────────────────────────────────────────── */
 #emoji-picker{
-  display:none;
-  position:absolute;
-  bottom:64px;
-  left:10px;
-  background:#1a1a26;
-  border:1px solid #2a2a38;
-  border-radius:16px;
-  padding:12px;
-  z-index:200;
-  box-shadow:0 8px 32px rgba(0,0,0,0.6);
-  width:270px;
+  display:none;position:absolute;bottom:64px;left:10px;
+  background:#1a1a26;border:1px solid #2a2a38;border-radius:16px;
+  padding:12px;z-index:200;box-shadow:0 8px 32px rgba(0,0,0,0.6);width:270px;
 }
 #emoji-picker.open{display:block;}
 .emoji-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
-.emoji-btn{font-size:22px;padding:4px;border-radius:8px;cursor:pointer;text-align:center;transition:background .1s;}
+.emoji-btn{
+  font-size:22px;padding:4px;border-radius:8px;
+  cursor:pointer;text-align:center;transition:background .1s;
+}
 .emoji-btn:hover{background:#2a2a38;}
+
+/* ── REACCIONAR CON TEXTO (panel personalizado en ctx-menu) ─────────── */
+#ctx-react-text-row{
+  display:flex;align-items:center;gap:6px;
+  padding:6px 10px;border-top:1px solid #2a2a38;
+}
+#ctx-react-text-input{
+  flex:1;background:#0f0f18;border:1px solid #2a2a38;border-radius:10px;
+  padding:7px 10px;font-size:13px;color:#fff;outline:none;
+}
+#ctx-react-text-input::placeholder{color:#555;}
+#ctx-react-text-send{
+  background:var(--bubble);border:none;border-radius:8px;
+  padding:7px 12px;color:#fff;cursor:pointer;font-size:13px;
+}
 
 /* ── TRES PUNTOS MENÚ ───────────────────────────────────────────────── */
 #dots-menu{
-  display:none;
-  position:absolute;
-  top:56px;right:10px;
-  background:#1a1a26;
-  border:1px solid #2a2a38;
-  border-radius:14px;
-  padding:8px;
-  z-index:300;
-  min-width:190px;
+  display:none;position:absolute;top:56px;right:10px;
+  background:#1a1a26;border:1px solid #2a2a38;border-radius:14px;
+  padding:8px;z-index:300;min-width:190px;
   box-shadow:0 8px 32px rgba(0,0,0,0.7);
 }
 #dots-menu.open{display:block;}
@@ -319,28 +233,20 @@ html,body{
 .dots-item:hover{background:#2a2a38;}
 .dots-item.danger{color:#f87171;}
 
-/* ── MODAL INFO CONTACTO ────────────────────────────────────────────── */
+/* ── MODAL INFO ─────────────────────────────────────────────────────── */
 #modal-info{
   display:none;position:fixed;inset:0;
-  background:rgba(0,0,0,0.85);
-  backdrop-filter:blur(6px);
-  z-index:400;
+  background:rgba(0,0,0,0.85);backdrop-filter:blur(6px);z-index:400;
   align-items:flex-end;justify-content:center;
 }
 #modal-info.open{display:flex;}
 .modal-sheet{
-  width:100%;max-width:480px;
-  background:#111118;
-  border-radius:24px 24px 0 0;
-  padding:24px;
-  max-height:80vh;overflow-y:auto;
+  width:100%;max-width:480px;background:#111118;
+  border-radius:24px 24px 0 0;padding:24px;max-height:80vh;overflow-y:auto;
 }
 
 /* ── VIDEO CONTAINER ────────────────────────────────────────────────── */
-#video-container{
-  display:none;position:fixed;inset:0;
-  background:#000;z-index:500;flex-direction:column;
-}
+#video-container{display:none;position:fixed;inset:0;background:#000;z-index:500;flex-direction:column;}
 #video-container.open{display:flex;}
 
 /* ── TOAST ──────────────────────────────────────────────────────────── */
@@ -348,18 +254,14 @@ html,body{
   position:fixed;top:20px;left:50%;transform:translateX(-50%);
   background:#22c55e;color:#fff;padding:10px 20px;
   border-radius:12px;font-size:13px;z-index:9999;
-  opacity:0;transition:opacity .3s;pointer-events:none;
-  white-space:nowrap;
+  opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;
 }
-#toast.error{background:#ef4444;}
 
-/* ── BARRA BÚSQUEDA ─────────────────────────────────────────────────── */
+/* ── BÚSQUEDA ───────────────────────────────────────────────────────── */
 #search-bar{display:none;padding:8px 12px;background:#111118;border-bottom:1px solid #1e1e28;flex-shrink:0;}
 
-/* ── SEPARADOR DE FECHA ─────────────────────────────────────────────── */
-.date-sep{
-  text-align:center;margin:8px 0;
-}
+/* ── SEPARADOR FECHA ────────────────────────────────────────────────── */
+.date-sep{text-align:center;margin:8px 0;}
 .date-sep span{
   background:#1a1a26;color:#666;
   font-size:11px;padding:3px 10px;border-radius:10px;
@@ -368,7 +270,6 @@ html,body{
 </head>
 <body>
 
-<!-- ═══ CONTENEDOR PRINCIPAL (max 480px centrado) ═════════════════════ -->
 <div id="app">
 
 <!-- ═══ HEADER ════════════════════════════════════════════════════════ -->
@@ -414,7 +315,7 @@ html,body{
     </div>
     <div class="dots-item" onclick="clearChat()">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:16px;height:16px;flex-shrink:0;"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-      Limpiar chat
+      Limpiar vista
     </div>
     <div class="dots-item danger" onclick="blockUser()">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:16px;height:16px;flex-shrink:0;"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
@@ -439,7 +340,6 @@ html,body{
 
 <!-- ═══ CAJA DE MENSAJES ══════════════════════════════════════════════ -->
 <div id="chat-box" style="flex:1;overflow-y:auto;padding:10px 0;display:flex;flex-direction:column;gap:0;<?= $bg_style ?>">
-  <!-- Badge E2E -->
   <div style="text-align:center;padding:14px 0 6px;">
     <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(0,0,0,0.4);border:1px solid #2a2a38;border-radius:20px;padding:5px 13px;font-size:11px;color:#888;">
       <svg fill="none" stroke="#22c55e" stroke-width="2" viewBox="0 0 24 24" style="width:12px;height:12px;"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
@@ -460,7 +360,6 @@ html,body{
 <!-- ═══ BARRA DE INPUT ════════════════════════════════════════════════ -->
 <div id="input-bar">
 
-  <!-- Menú adjuntar + emoji -->
   <div id="attach-menu">
     <div class="react-row" style="border-bottom:1px solid #2a2a38;padding-bottom:8px;margin-bottom:4px;">
       <?php foreach(['😀','😂','🥰','😎','🤔','😢','❤️'] as $e): ?>
@@ -483,39 +382,33 @@ html,body{
     </label>
   </div>
 
-  <!-- Emoji grid completo -->
   <div id="emoji-picker">
     <div style="font-size:11px;color:#666;margin-bottom:8px;font-weight:600;letter-spacing:.05em;">EMOJIS</div>
     <div class="emoji-grid" id="emoji-grid"></div>
   </div>
 
-  <!-- Botón + (adjuntar) -->
   <button onclick="toggleAttachMenu()" class="icon-btn" style="flex-shrink:0;" aria-label="Adjuntar">
     <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
   </button>
 
-  <!-- Input de texto -->
   <textarea id="msg-input" rows="1" placeholder="Mensaje..."
             oninput="onInputChange(this)"></textarea>
 
-  <!-- FIX 4: Solo botón audio al lado del input (sin emoji a la derecha) -->
   <button id="audio-btn" onclick="toggleAudio()" class="icon-btn" style="flex-shrink:0;" aria-label="Audio">
     <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 016 0v6a3 3 0 01-3 3z"/></svg>
   </button>
 
-  <!-- FIX 3: Botón enviar con avión apuntando hacia ARRIBA -->
   <button id="send-btn" onclick="sendMessage()" aria-label="Enviar">
     <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-      <!-- Avión de papel apuntando arriba -->
       <line x1="12" y1="19" x2="12" y2="5"/>
       <polyline points="5 12 12 5 19 12"/>
     </svg>
   </button>
 </div>
 
-<!-- ═══ MENÚ CONTEXTUAL (borrar / responder / reaccionar) ════════════ -->
+<!-- ═══ MENÚ CONTEXTUAL ═══════════════════════════════════════════════ -->
 <div class="ctx-menu" id="ctx-menu">
-  <!-- Reacciones rápidas -->
+  <!-- Reacciones rápidas con emoji -->
   <div class="react-row">
     <span class="react-opt" onclick="ctxReact('❤️')">❤️</span>
     <span class="react-opt" onclick="ctxReact('😂')">😂</span>
@@ -524,13 +417,30 @@ html,body{
     <span class="react-opt" onclick="ctxReact('👍')">👍</span>
     <span class="react-opt" onclick="ctxReact('🔥')">🔥</span>
   </div>
+
+  <!-- Responder con texto (ctx) -->
   <div class="ctx-item" onclick="ctxReply()">
     <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:16px;height:16px;flex-shrink:0;"><path d="M3 10h11a4 4 0 010 8h-1m-9-8L7 6m-4 4l4 4"/></svg>
     Responder
   </div>
-  <div class="ctx-item" id="ctx-delete-btn" onclick="ctxDelete()">
-    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:16px;height:16px;flex-shrink:0;color:#f87171;"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-    <span style="color:#f87171;">Eliminar</span>
+
+  <!-- Copiar texto -->
+  <div class="ctx-item" onclick="ctxCopy()">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:16px;height:16px;flex-shrink:0;"><path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+    Copiar
+  </div>
+
+  <!-- Eliminar (solo mis mensajes) -->
+  <div class="ctx-item danger" id="ctx-delete-btn" onclick="ctxDelete()">
+    <svg fill="none" stroke="#f87171" stroke-width="2" viewBox="0 0 24 24" style="width:16px;height:16px;flex-shrink:0;"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+    Eliminar mensaje
+  </div>
+
+  <!-- Input reaccionar con texto -->
+  <div id="ctx-react-text-row">
+    <input id="ctx-react-text-input" type="text" placeholder="Reaccionar con texto…"
+           maxlength="100" onkeydown="if(event.key==='Enter')ctxReactText()">
+    <button id="ctx-react-text-send" onclick="ctxReactText()">→</button>
   </div>
 </div>
 
@@ -580,13 +490,11 @@ html,body{
   </div>
 </div>
 
-<!-- ═══ TOAST ═════════════════════════════════════════════════════════ -->
 <div id="toast"></div>
 
 </div><!-- /app -->
 
 <script>
-/* ── CONSTANTES ────────────────────────────────────────────────────── */
 const ME      = <?= $user_id ?>;
 const PARTNER = <?= $partner_id ?>;
 const BUBBLE  = '<?= addslashes($bubble_color) ?>';
@@ -597,8 +505,7 @@ const peer = new Peer('bf_' + ME + '_' + _peerRandSuffix);
 let localStream, currentCall;
 
 peer.on('open', id => {
-  const fd = new FormData();
-  fd.append('peer_id', id);
+  const fd = new FormData(); fd.append('peer_id', id);
   fetch('ajax.php?action=update_peer', {method:'POST',body:fd});
 });
 peer.on('call', call => {
@@ -609,15 +516,13 @@ peer.on('call', call => {
       localStream = stream;
       document.getElementById('localVideo').srcObject = stream;
       document.getElementById('video-container').classList.add('open');
-      call.answer(stream);
-      currentCall = call;
+      call.answer(stream); currentCall = call;
       call.on('stream', rs => document.getElementById('remoteVideo').srcObject = rs);
     });
   }
 });
 function startCall(withVideo) {
-  fetch(`ajax.php?action=get_partner_info`)
-  .then(r=>r.json()).then(data => {
+  fetch('ajax.php?action=get_partner_info').then(r=>r.json()).then(data => {
     if(!data || !data.peer_id) { showToast('El contacto no está disponible','error'); return; }
     const c = {video:withVideo,audio:true};
     navigator.mediaDevices.getUserMedia(c).then(stream => {
@@ -638,13 +543,12 @@ function endCall() {
 
 /* ── INFO MODAL ────────────────────────────────────────────────────── */
 function openInfoModal() {
-  fetch('ajax.php?action=get_partner_info')
-  .then(r=>r.json()).then(d => {
+  fetch('ajax.php?action=get_partner_info').then(r=>r.json()).then(d => {
     if(!d) return;
-    document.getElementById('info-avatar').src              = d.avatar_url || '';
-    document.getElementById('info-nombre').textContent      = d.nombre || d.username;
-    document.getElementById('info-username').textContent    = '@'+d.username;
-    document.getElementById('info-bio').textContent         = d.bio || 'Sin descripción';
+    document.getElementById('info-avatar').src           = d.avatar_url || '';
+    document.getElementById('info-nombre').textContent   = d.nombre || d.username;
+    document.getElementById('info-username').textContent = '@'+d.username;
+    document.getElementById('info-bio').textContent      = d.bio || 'Sin descripción';
   });
   document.getElementById('modal-info').classList.add('open');
   closeDotsMenu();
@@ -674,55 +578,74 @@ function cancelReply() {
   document.getElementById('reply-bar').style.display = 'none';
 }
 
-/* ── MENÚ CONTEXTUAL (clic derecho / long press) ────────────────────
-   Guarda el mensaje activo para borrar/responder/reaccionar            */
-let ctxMsg = null; // {id, texto, isMe}
+/* ── MENÚ CONTEXTUAL ───────────────────────────────────────────────── */
+let ctxMsg = null;
 function openCtxMenu(e, msg, isMe) {
-  e.preventDefault();
-  e.stopPropagation();
+  e.preventDefault(); e.stopPropagation();
   ctxMsg = msg;
   const menu = document.getElementById('ctx-menu');
-  // Mostrar/ocultar opción eliminar solo en mis mensajes
   document.getElementById('ctx-delete-btn').style.display = isMe ? 'flex' : 'none';
+  document.getElementById('ctx-react-text-input').value = '';
   menu.classList.add('open');
-  // Posicionar dentro del #app
-  const app = document.getElementById('app');
+  const app  = document.getElementById('app');
   const rect = app.getBoundingClientRect();
   let x = (e.clientX || e.touches?.[0]?.clientX || 100) - rect.left;
   let y = (e.clientY || e.touches?.[0]?.clientY || 200) - rect.top;
-  const mw = menu.offsetWidth || 190;
-  const mh = menu.offsetHeight || 180;
+  const mw = menu.offsetWidth || 200;
+  const mh = menu.offsetHeight || 200;
   if(x + mw > rect.width - 8)  x = rect.width - mw - 8;
   if(y + mh > rect.height - 8) y = y - mh - 10;
   if(y < 0) y = 4;
   menu.style.left = x + 'px';
   menu.style.top  = y + 'px';
 }
-function closeCtxMenu() {
-  document.getElementById('ctx-menu').classList.remove('open');
-}
+function closeCtxMenu() { document.getElementById('ctx-menu').classList.remove('open'); }
+
 function ctxReact(emoji) {
   if(!ctxMsg) return;
   sendReaction(emoji, ctxMsg.id);
+  closeCtxMenu();
+}
+function ctxReactText() {
+  if(!ctxMsg) return;
+  const inp  = document.getElementById('ctx-react-text-input');
+  const text = inp.value.trim();
+  if(!text) return;
+  // Enviar como mensaje de reacción con texto
+  const fd = new FormData();
+  fd.append('mensaje', '💬 ' + text);
+  fd.append('reply_to', ctxMsg.id);
+  fetch('ajax.php?action=send&contact_id=' + PARTNER, {method:'POST', body:fd})
+    .then(r=>r.json())
+    .then(d=>{ if(d.status==='ok'){ loadMessages(); showToast('Reacción enviada'); } else showToast(d.error||'Error','error'); });
   closeCtxMenu();
 }
 function ctxReply() {
   if(!ctxMsg) return;
   setReply(ctxMsg.id, ctxMsg.texto || '[archivo]', ctxMsg.user || 'usuario');
 }
+function ctxCopy() {
+  if(!ctxMsg || !ctxMsg.texto) return;
+  navigator.clipboard?.writeText(ctxMsg.texto).then(() => showToast('Copiado'));
+  closeCtxMenu();
+}
 function ctxDelete() {
   if(!ctxMsg || !ctxMsg.isMe) return;
-  if(!confirm('¿Eliminar este mensaje?')) return;
+  if(!confirm('¿Eliminar este mensaje para todos?')) return;
   const fd = new FormData();
   fd.append('msg_id', ctxMsg.id);
   fetch('ajax.php?action=delete_msg', {method:'POST', body:fd})
-    .then(()=>{ loadMessages(); showToast('Mensaje eliminado'); });
+    .then(r=>r.json())
+    .then(d => {
+      if(d.status==='ok') { loadMessages(); showToast('Mensaje eliminado'); }
+      else showToast(d.error||'Error','error');
+    });
   closeCtxMenu();
 }
 
-/* Cerrar menú al clicar fuera */
+/* Cerrar menús al clicar fuera */
 document.addEventListener('click', e => {
-  if(!e.target.closest('#ctx-menu')) closeCtxMenu();
+  if(!e.target.closest('#ctx-menu'))     closeCtxMenu();
   if(!e.target.closest('#dots-menu') && !e.target.closest('[onclick="toggleDotsMenu()"]')) closeDotsMenu();
   if(!e.target.closest('#attach-menu') && !e.target.closest('[onclick="toggleAttachMenu()"]')) document.getElementById('attach-menu').classList.remove('open');
   if(!e.target.closest('#emoji-picker') && !e.target.closest('[onclick="toggleEmojiPicker()"]')) document.getElementById('emoji-picker').classList.remove('open');
@@ -762,8 +685,7 @@ function buildEmojiGrid() {
   const grid = document.getElementById('emoji-grid');
   EMOJIS.forEach(em => {
     const btn = document.createElement('span');
-    btn.className = 'emoji-btn';
-    btn.textContent = em;
+    btn.className = 'emoji-btn'; btn.textContent = em;
     btn.onclick = () => insertEmoji(em);
     grid.appendChild(btn);
   });
@@ -776,8 +698,7 @@ function insertEmoji(em) {
   const inp = document.getElementById('msg-input');
   const pos = inp.selectionStart;
   inp.value = inp.value.slice(0, pos) + em + inp.value.slice(inp.selectionEnd);
-  inp.focus();
-  inp.setSelectionRange(pos + em.length, pos + em.length);
+  inp.focus(); inp.setSelectionRange(pos + em.length, pos + em.length);
   onInputChange(inp);
   document.getElementById('emoji-picker').classList.remove('open');
 }
@@ -822,8 +743,7 @@ function startRecording() {
         .catch(()=>showToast('Error al enviar audio','error'));
       stream.getTracks().forEach(t=>t.stop());
     };
-    mediaRec.start();
-    isRecording = true;
+    mediaRec.start(); isRecording = true;
     document.getElementById('audio-btn').classList.add('recording');
     showToast('Grabando… toca el micro para detener');
   }).catch(()=>showToast('No se pudo acceder al micrófono','error'));
@@ -842,10 +762,8 @@ function sendMessage() {
   const fd = new FormData();
   fd.append('mensaje', text);
   if(replyTo) fd.append('reply_to', replyTo);
-  input.value = '';
-  input.style.height = 'auto';
-  onInputChange(input);
-  cancelReply();
+  input.value = ''; input.style.height = 'auto';
+  onInputChange(input); cancelReply();
   fetch('ajax.php?action=send&contact_id=' + PARTNER, {method:'POST', body:fd})
     .then(r=>r.json())
     .then(data => { if(data.status==='ok') loadMessages(); else showToast(data.error||'Error','error'); })
@@ -855,36 +773,37 @@ function sendMessage() {
 /* ── LOAD MESSAGES ─────────────────────────────────────────────────── */
 let lastCount = 0;
 function loadMessages() {
+  const searchQ = document.getElementById('search-input')?.value?.trim() || '';
   fetch('ajax.php?action=fetch&contact_id=' + PARTNER)
-  .then(r => {
-    if(!r.ok) return [];
-    return r.json().catch(()=>[]);
-  })
+  .then(r => { if(!r.ok) return []; return r.json().catch(()=>[]); })
   .then(msgs => {
     if(!Array.isArray(msgs)) return;
-    const box    = document.getElementById('chat-box');
-    const atBot  = box.scrollHeight - box.scrollTop - box.clientHeight < 100;
 
-    /* Limpiar excepto badge E2E */
+    let filtered = msgs;
+    if(searchQ) {
+      filtered = msgs.filter(m =>
+        (m.contenido || '').toLowerCase().includes(searchQ.toLowerCase())
+      );
+    }
+
+    const box   = document.getElementById('chat-box');
+    const atBot = box.scrollHeight - box.scrollTop - box.clientHeight < 100;
     while(box.children.length > 1) box.removeChild(box.lastChild);
 
     let lastDate = '';
 
-    msgs.forEach(m => {
+    filtered.forEach(m => {
       const isMe = (parseInt(m.remitente_id) === ME);
-
-      /* ── Separador de fecha ─────────────────────────── */
       const rawDate = m.created_at || '';
       let dateLabel = '';
       if(rawDate) {
         const d = new Date(rawDate.replace(' ','T'));
         if(!isNaN(d)) {
-          const hoy   = new Date();
-          const ayer  = new Date(); ayer.setDate(ayer.getDate()-1);
-          const ds    = d.toDateString();
-          dateLabel   = ds === hoy.toDateString()  ? 'Hoy'
-                      : ds === ayer.toDateString() ? 'Ayer'
-                      : d.toLocaleDateString('es',{day:'2-digit',month:'short',year:'numeric'});
+          const hoy  = new Date(); const ayer = new Date(); ayer.setDate(ayer.getDate()-1);
+          const ds   = d.toDateString();
+          dateLabel  = ds === hoy.toDateString()  ? 'Hoy'
+                     : ds === ayer.toDateString() ? 'Ayer'
+                     : d.toLocaleDateString('es',{day:'2-digit',month:'short',year:'numeric'});
         }
       }
       if(dateLabel && dateLabel !== lastDate) {
@@ -895,24 +814,19 @@ function loadMessages() {
         box.appendChild(sep);
       }
 
-      /* ── Hora ──────────────────────────────────────── */
       let hora = '';
       if(rawDate) {
         const d2 = new Date(rawDate.replace(' ','T'));
         if(!isNaN(d2)) hora = d2.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
       }
 
-      /* ── Fila ──────────────────────────────────────── */
-      const row = document.createElement('div');
+      const row    = document.createElement('div');
       row.className = 'msg-row ' + (isMe ? 'me' : 'them');
-
-      /* ── Burbuja ───────────────────────────────────── */
       const bubble = document.createElement('div');
       bubble.className = 'bubble ' + (isMe ? 'me' : 'them');
 
       let inner = '';
 
-      /* Reply preview */
       if(m.reply_texto) {
         inner += `<div class="reply-preview">
           <span style="color:${isMe?'rgba(255,255,255,0.7)':BUBBLE};font-weight:600;">${escHtml(m.reply_user||'')}</span><br>
@@ -920,48 +834,37 @@ function loadMessages() {
         </div>`;
       }
 
-      /* Contenido texto */
       if(m.contenido) inner += `<div>${escHtml(m.contenido)}</div>`;
 
-      /* Archivos */
       const tipo = m.tipo || '';
-      if(tipo==='imagen' || tipo==='image') {
+      if(tipo==='imagen'||tipo==='image') {
         inner += `<img src="${escAttr(m.archivo_url)}" style="max-width:100%;border-radius:10px;margin-top:6px;cursor:pointer;display:block;" onclick="window.open('${escAttr(m.archivo_url)}')">`;
       } else if(tipo==='video') {
         inner += `<video src="${escAttr(m.archivo_url)}" controls style="max-width:100%;border-radius:10px;margin-top:6px;display:block;"></video>`;
       } else if(tipo==='audio') {
         inner += `<audio src="${escAttr(m.archivo_url)}" controls style="margin-top:6px;width:100%;max-width:220px;display:block;"></audio>`;
-      } else if(tipo==='archivo' || tipo==='documento') {
+      } else if(tipo==='archivo'||tipo==='documento') {
         const fname = (m.archivo_url||'').split('/').pop();
         inner += `<a href="${escAttr(m.archivo_url)}" target="_blank" rel="noopener" style="color:#a78bfa;font-size:12px;margin-top:4px;display:flex;align-items:center;gap:4px;text-decoration:none;">📎 ${escHtml(fname)}</a>`;
       }
 
-      /* Timestamp */
       if(hora) inner += `<span class="msg-time" style="text-align:${isMe?'right':'left'};">${hora}</span>`;
 
       bubble.innerHTML = inner;
 
-      /* ── Long press / clic derecho → menú contextual ─ */
-      const msgData = {
-        id:    m.id,
-        texto: m.contenido || '',
-        user:  isMe ? 'yo' : (m.emisor_name || 'usuario'),
-        isMe:  isMe
-      };
+      /* Long press / context menu */
+      const msgData = {id: m.id, texto: m.contenido||'', user: isMe?'yo':(m.reply_user||'usuario'), isMe};
       let pressTimer;
-      bubble.addEventListener('touchstart', e => {
-        pressTimer = setTimeout(() => openCtxMenu(e.touches[0], msgData, isMe), 480);
-      }, {passive:true});
+      bubble.addEventListener('touchstart', e => { pressTimer = setTimeout(() => openCtxMenu(e.touches[0], msgData, isMe), 480); }, {passive:true});
       bubble.addEventListener('touchend',   () => clearTimeout(pressTimer));
       bubble.addEventListener('touchmove',  () => clearTimeout(pressTimer));
       bubble.addEventListener('contextmenu', e => openCtxMenu(e, msgData, isMe));
-      /* Doble toque / doble clic → responder rápido */
-      bubble.addEventListener('dblclick', () => setReply(m.id, m.contenido||'[archivo]', msgData.user));
+      bubble.addEventListener('dblclick',    () => setReply(m.id, m.contenido||'[archivo]', msgData.user));
 
       row.appendChild(bubble);
       box.appendChild(row);
 
-      /* ── Reacciones debajo de la burbuja ──────────── */
+      /* Reacciones */
       if(m.reacciones && m.reacciones.length) {
         const rRow = document.createElement('div');
         rRow.className = 'reactions-row';
@@ -977,9 +880,9 @@ function loadMessages() {
       }
     });
 
-    if(atBot || msgs.length !== lastCount) {
+    if(atBot || filtered.length !== lastCount) {
       box.scrollTop = box.scrollHeight;
-      lastCount = msgs.length;
+      lastCount = filtered.length;
     }
   }).catch(()=>{});
 }
@@ -1004,10 +907,8 @@ function clearChat() {
 /* ── TOAST ─────────────────────────────────────────────────────────── */
 function showToast(msg, type='ok') {
   const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.style.background = type==='error' ? '#ef4444' : '#22c55e';
-  t.style.opacity = '1';
-  clearTimeout(t._timer);
+  t.textContent = msg; t.style.background = type==='error' ? '#ef4444' : '#22c55e';
+  t.style.opacity = '1'; clearTimeout(t._timer);
   t._timer = setTimeout(()=>t.style.opacity='0', 2800);
 }
 
@@ -1018,7 +919,6 @@ function escHtml(s) {
 }
 function escAttr(s) {
   if(!s) return '';
-  // Solo permite rutas relativas o https para evitar XSS en src
   if(!/^(uploads\/|https?:\/\/)/.test(s)) return '';
   return escHtml(s);
 }
