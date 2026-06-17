@@ -1,4 +1,32 @@
 <?php
+/*
+ * SQL REQUERIDO (ejecutar una sola vez):
+ *
+ * ALTER TABLE usuarios ADD COLUMN typing_at TIMESTAMP NULL DEFAULT NULL;
+ * ALTER TABLE mensajes ADD COLUMN leido_at TIMESTAMP NULL DEFAULT NULL;
+ * ALTER TABLE mensajes ADD COLUMN fijado TINYINT(1) DEFAULT 0;
+ *
+ * CREATE TABLE IF NOT EXISTS solicitudes (
+ *   id INT AUTO_INCREMENT PRIMARY KEY,
+ *   remitente_id INT NOT NULL,
+ *   destinatario_id INT NOT NULL,
+ *   estado ENUM('pendiente','aceptada','rechazada') DEFAULT 'pendiente',
+ *   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ *   FOREIGN KEY (remitente_id) REFERENCES usuarios(id),
+ *   FOREIGN KEY (destinatario_id) REFERENCES usuarios(id),
+ *   UNIQUE KEY uq_sol (remitente_id, destinatario_id)
+ * );
+ *
+ * CREATE TABLE IF NOT EXISTS historia_vistas (
+ *   id INT AUTO_INCREMENT PRIMARY KEY,
+ *   historia_id INT NOT NULL,
+ *   usuario_id INT NOT NULL,
+ *   visto_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ *   FOREIGN KEY (historia_id) REFERENCES historias(id) ON DELETE CASCADE,
+ *   UNIQUE KEY uq_vista (historia_id, usuario_id)
+ * );
+ */
+
 require 'config.php';
 
 // Autenticación obligatoria para todas las acciones
@@ -27,12 +55,13 @@ $partner_id = isset($_SESSION['partner_id']) ? (int) $_SESSION['partner_id'] : n
 // ── TIPOS MIME PERMITIDOS ────────────────────────────────────────────────
 const ALLOWED_MIME = [
     'image/jpeg', 'image/png', 'image/webp', 'image/gif',
-    'video/mp4', 'video/webm',
+    'video/mp4', 'video/webm', 'video/quicktime',
     'application/pdf',
     'audio/mpeg', 'audio/ogg',
 ];
-const ALLOWED_EXT  = ['jpg','jpeg','png','webp','gif','mp4','webm','pdf','mp3','ogg'];
+const ALLOWED_EXT  = ['jpg','jpeg','png','webp','gif','mp4','webm','mov','pdf','mp3','ogg'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_STORY_VIDEO_SIZE = 50 * 1024 * 1024; // 50 MB para historias de video
 
 function subirArchivo(array $file, string $prefijo = ''): ?string {
     if ($file['error'] !== UPLOAD_ERR_OK) return null;
@@ -96,7 +125,7 @@ if ($action === 'send') {
         }
         $ext  = strtolower(pathinfo($archivo_url, PATHINFO_EXTENSION));
         $tipo = in_array($ext, ['jpg','jpeg','png','webp','gif']) ? 'imagen'
-               : (in_array($ext, ['mp4','webm'])                 ? 'video'
+               : (in_array($ext, ['mp4','webm','mov'])           ? 'video'
                : (in_array($ext, ['mp3','ogg'])                  ? 'audio'
                : 'archivo'));
     }
@@ -132,7 +161,7 @@ if ($action === 'send') {
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// 2. FETCH MENSAJES  (con reacciones agregadas)
+// 2. FETCH MENSAJES  (con reacciones, leido_at y fijado)
 // ────────────────────────────────────────────────────────────────────────
 if ($action === 'fetch') {
     if (!verificarAccesoConversacion($pdo, $user_id, $partner_id)) {
@@ -145,7 +174,8 @@ if ($action === 'fetch') {
     $before = isset($_GET['before_id']) ? (int) $_GET['before_id'] : PHP_INT_MAX;
 
     $stmt = $pdo->prepare("
-        SELECT m.id, m.remitente_id, m.destinatario_id, m.contenido, m.tipo, m.archivo_url, m.created_at, m.reply_to,
+        SELECT m.id, m.remitente_id, m.destinatario_id, m.contenido, m.tipo, m.archivo_url,
+               m.created_at, m.reply_to, m.leido_at, m.fijado,
                rm.contenido AS reply_contenido, ru.nombre AS reply_user
         FROM mensajes m
         LEFT JOIN mensajes rm ON rm.id = m.reply_to
@@ -195,11 +225,13 @@ if ($action === 'fetch') {
             $m['id']              = (int) $m['id'];
             $m['remitente_id']    = (int) $m['remitente_id'];
             $m['destinatario_id'] = (int) $m['destinatario_id'];
+            $m['fijado']          = (int) ($m['fijado'] ?? 0);
             if ($m['contenido'])      $m['contenido']      = descifrar($m['contenido']);
             if ($m['reply_contenido'])$m['reply_texto']    = descifrar($m['reply_contenido']);
             if ($m['reply_to'])       $m['reply_to']       = (int) $m['reply_to'];
             $m['reacciones']  = $reactions[(int)$m['id']] ?? [];
             $m['my_reaction'] = $myReactions[(int)$m['id']] ?? null;
+            $m['leido']       = !empty($m['leido_at']);
             unset($m['reply_contenido']);
         }
         unset($m);
@@ -210,7 +242,7 @@ if ($action === 'fetch') {
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// 3. SUBIR HISTORIA
+// 3. SUBIR HISTORIA (imagen o video)
 // ────────────────────────────────────────────────────────────────────────
 if ($action === 'upload_story') {
     if (empty($_FILES['story_file']['name'])) {
@@ -219,18 +251,40 @@ if ($action === 'upload_story') {
         exit;
     }
 
-    $allowedMimeStory = ['image/jpeg','image/png','image/webp','image/gif'];
+    $allowedMimeStory = [
+        'image/jpeg','image/png','image/webp','image/gif',
+        'video/mp4','video/webm','video/quicktime'
+    ];
+    $allowedExtStory = ['jpg','jpeg','png','webp','gif','mp4','webm','mov'];
+
     $finfo    = new finfo(FILEINFO_MIME_TYPE);
     $mimeReal = $finfo->file($_FILES['story_file']['tmp_name']);
 
     if (!in_array($mimeReal, $allowedMimeStory, true)) {
         http_response_code(400);
-        echo json_encode(['error' => 'Solo se permiten imágenes']);
+        echo json_encode(['error' => 'Solo se permiten imágenes o videos cortos']);
         exit;
     }
 
-    $dest = subirArchivo($_FILES['story_file'], 'story_' . $user_id . '_');
-    if ($dest === null) {
+    // Límite de tamaño: 50 MB para video, 10 MB para imagen
+    $isVideo = in_array($mimeReal, ['video/mp4','video/webm','video/quicktime'], true);
+    $maxSize = $isVideo ? MAX_STORY_VIDEO_SIZE : MAX_FILE_SIZE;
+
+    if ($_FILES['story_file']['size'] > $maxSize) {
+        http_response_code(400);
+        echo json_encode(['error' => $isVideo ? 'El video no puede superar 50 MB' : 'La imagen no puede superar 10 MB']);
+        exit;
+    }
+
+    $ext = strtolower(pathinfo($_FILES['story_file']['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, $allowedExtStory, true)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Extensión no permitida']);
+        exit;
+    }
+
+    $dest = 'uploads/story_' . $user_id . '_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+    if (!move_uploaded_file($_FILES['story_file']['tmp_name'], $dest)) {
         http_response_code(500);
         echo json_encode(['error' => 'Error al subir']);
         exit;
@@ -421,6 +475,262 @@ if ($action === 'block') {
     $pdo->prepare('INSERT IGNORE INTO bloqueados (usuario_id, bloqueado_id) VALUES (?,?)')
         ->execute([$user_id, $partner_id]);
     echo json_encode(['status' => 'ok']);
+    exit;
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// 11. NOTIFICACIONES (polling)
+// ────────────────────────────────────────────────────────────────────────
+if ($action === 'fetch_notifications') {
+    // Mensajes no leídos por conversación (recibidos por mí, sin leido_at)
+    $stmtUnread = $pdo->prepare('
+        SELECT remitente_id, COUNT(*) as total
+        FROM mensajes
+        WHERE destinatario_id = ?
+          AND leido_at IS NULL
+        GROUP BY remitente_id
+    ');
+    $stmtUnread->execute([$user_id]);
+    $unread = [];
+    foreach ($stmtUnread->fetchAll() as $row) {
+        $unread[(int)$row['remitente_id']] = (int)$row['total'];
+    }
+
+    // Solicitudes de contacto pendientes
+    $stmtReq = $pdo->prepare('
+        SELECT COUNT(*) as total FROM solicitudes
+        WHERE destinatario_id = ? AND estado = ?
+    ');
+    $stmtReq->execute([$user_id, 'pendiente']);
+    $pendingRequests = (int)$stmtReq->fetchColumn();
+
+    echo json_encode([
+        'unread'          => $unread,
+        'total_unread'    => array_sum($unread),
+        'pending_requests'=> $pendingRequests,
+    ]);
+    exit;
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// 12. MARCAR MENSAJES COMO LEÍDOS
+// ────────────────────────────────────────────────────────────────────────
+if ($action === 'mark_read') {
+    if ($partner_id === null) {
+        echo json_encode(['status' => 'ok']);
+        exit;
+    }
+    $pdo->prepare('
+        UPDATE mensajes
+        SET leido_at = NOW()
+        WHERE destinatario_id = ?
+          AND remitente_id = ?
+          AND leido_at IS NULL
+    ')->execute([$user_id, $partner_id]);
+    echo json_encode(['status' => 'ok']);
+    exit;
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// 13. INDICADOR "ESCRIBIENDO..."
+// ────────────────────────────────────────────────────────────────────────
+if ($action === 'typing') {
+    // Actualiza timestamp de escritura del usuario actual
+    $pdo->prepare('UPDATE usuarios SET typing_at = NOW() WHERE id = ?')->execute([$user_id]);
+    echo json_encode(['status' => 'ok']);
+    exit;
+}
+
+if ($action === 'check_typing') {
+    // Devuelve si el partner está escribiendo (actividad en los últimos 3 segundos)
+    if ($partner_id === null) {
+        echo json_encode(['typing' => false]);
+        exit;
+    }
+    $stmt = $pdo->prepare('
+        SELECT typing_at FROM usuarios
+        WHERE id = ?
+          AND typing_at >= NOW() - INTERVAL 3 SECOND
+        LIMIT 1
+    ');
+    $stmt->execute([$partner_id]);
+    $row = $stmt->fetch();
+    echo json_encode(['typing' => (bool)$row]);
+    exit;
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// 14. FIJAR / DESFIJAR MENSAJE
+// ────────────────────────────────────────────────────────────────────────
+if ($action === 'pin_msg') {
+    $msg_id = (int) ($_POST['msg_id'] ?? 0);
+    if (!$msg_id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'ID inválido']);
+        exit;
+    }
+
+    // Verificar que el mensaje pertenece a esta conversación
+    $chk = $pdo->prepare('
+        SELECT id, fijado FROM mensajes
+        WHERE id = ?
+          AND (remitente_id = ? OR destinatario_id = ?)
+        LIMIT 1
+    ');
+    $chk->execute([$msg_id, $user_id, $user_id]);
+    $msg = $chk->fetch();
+
+    if (!$msg) {
+        http_response_code(403);
+        echo json_encode(['error' => 'No autorizado']);
+        exit;
+    }
+
+    $nuevo = $msg['fijado'] ? 0 : 1;
+    $pdo->prepare('UPDATE mensajes SET fijado = ? WHERE id = ?')->execute([$nuevo, $msg_id]);
+    echo json_encode(['status' => 'ok', 'fijado' => $nuevo]);
+    exit;
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// 15. SOLICITUDES DE CONTACTO
+// ────────────────────────────────────────────────────────────────────────
+if ($action === 'send_request') {
+    $dest_id = (int) ($_POST['dest_id'] ?? 0);
+    if (!$dest_id || $dest_id === $user_id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'ID inválido']);
+        exit;
+    }
+    // Verificar que el destinatario existe
+    $chk = $pdo->prepare('SELECT id FROM usuarios WHERE id = ? LIMIT 1');
+    $chk->execute([$dest_id]);
+    if (!$chk->fetch()) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Usuario no encontrado']);
+        exit;
+    }
+    // Verificar si ya son contactos
+    $chk2 = $pdo->prepare('SELECT id FROM contactos WHERE usuario_id=? AND contacto_id=? LIMIT 1');
+    $chk2->execute([$user_id, $dest_id]);
+    if ($chk2->fetch()) {
+        echo json_encode(['status' => 'already_contacts']);
+        exit;
+    }
+    try {
+        $pdo->prepare('
+            INSERT INTO solicitudes (remitente_id, destinatario_id) VALUES (?,?)
+            ON DUPLICATE KEY UPDATE estado=IF(estado="rechazada","pendiente",estado), created_at=NOW()
+        ')->execute([$user_id, $dest_id]);
+        echo json_encode(['status' => 'ok']);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'exists']);
+    }
+    exit;
+}
+
+if ($action === 'accept_request') {
+    $req_id = (int) ($_POST['req_id'] ?? 0);
+    if (!$req_id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'ID inválido']);
+        exit;
+    }
+    $stmt = $pdo->prepare('SELECT * FROM solicitudes WHERE id=? AND destinatario_id=? AND estado=? LIMIT 1');
+    $stmt->execute([$req_id, $user_id, 'pendiente']);
+    $sol = $stmt->fetch();
+    if (!$sol) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Solicitud no encontrada']);
+        exit;
+    }
+    // Actualizar estado
+    $pdo->prepare('UPDATE solicitudes SET estado=? WHERE id=?')->execute(['aceptada', $req_id]);
+    // Insertar en contactos (bidireccional)
+    $pdo->prepare('INSERT IGNORE INTO contactos (usuario_id, contacto_id) VALUES (?,?)')->execute([$user_id, $sol['remitente_id']]);
+    $pdo->prepare('INSERT IGNORE INTO contactos (usuario_id, contacto_id) VALUES (?,?)')->execute([$sol['remitente_id'], $user_id]);
+    echo json_encode(['status' => 'ok']);
+    exit;
+}
+
+if ($action === 'reject_request') {
+    $req_id = (int) ($_POST['req_id'] ?? 0);
+    if (!$req_id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'ID inválido']);
+        exit;
+    }
+    $pdo->prepare('UPDATE solicitudes SET estado=? WHERE id=? AND destinatario_id=?')
+        ->execute(['rechazada', $req_id, $user_id]);
+    echo json_encode(['status' => 'ok']);
+    exit;
+}
+
+if ($action === 'fetch_requests') {
+    $stmt = $pdo->prepare('
+        SELECT s.id, s.remitente_id, s.created_at,
+               u.username, u.nombre, u.avatar_url
+        FROM solicitudes s
+        JOIN usuarios u ON u.id = s.remitente_id
+        WHERE s.destinatario_id = ? AND s.estado = ?
+        ORDER BY s.created_at DESC
+    ');
+    $stmt->execute([$user_id, 'pendiente']);
+    $rows = $stmt->fetchAll();
+    foreach ($rows as &$r) {
+        $r['id']           = (int)$r['id'];
+        $r['remitente_id'] = (int)$r['remitente_id'];
+    }
+    unset($r);
+    echo json_encode($rows);
+    exit;
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// 16. VISTAS DE HISTORIAS
+// ────────────────────────────────────────────────────────────────────────
+if ($action === 'register_view') {
+    $story_id = (int) ($_POST['story_id'] ?? 0);
+    if (!$story_id) {
+        echo json_encode(['status' => 'ok']);
+        exit;
+    }
+    // No registrar vista propia
+    $chk = $pdo->prepare('SELECT usuario_id FROM historias WHERE id=? LIMIT 1');
+    $chk->execute([$story_id]);
+    $owner = $chk->fetchColumn();
+    if ($owner && (int)$owner !== $user_id) {
+        $pdo->prepare('INSERT IGNORE INTO historia_vistas (historia_id, usuario_id) VALUES (?,?)')
+            ->execute([$story_id, $user_id]);
+    }
+    echo json_encode(['status' => 'ok']);
+    exit;
+}
+
+if ($action === 'get_story_views') {
+    $story_id = (int) ($_GET['story_id'] ?? 0);
+    if (!$story_id) {
+        echo json_encode(['count' => 0, 'viewers' => []]);
+        exit;
+    }
+    // Solo el dueño puede ver quién la vio
+    $chk = $pdo->prepare('SELECT usuario_id FROM historias WHERE id=? LIMIT 1');
+    $chk->execute([$story_id]);
+    $owner = (int)$chk->fetchColumn();
+    if ($owner !== $user_id) {
+        echo json_encode(['count' => 0, 'viewers' => []]);
+        exit;
+    }
+    $stmt = $pdo->prepare('
+        SELECT hv.visto_at, u.username, u.nombre, u.avatar_url
+        FROM historia_vistas hv
+        JOIN usuarios u ON u.id = hv.usuario_id
+        WHERE hv.historia_id = ?
+        ORDER BY hv.visto_at DESC
+    ');
+    $stmt->execute([$story_id]);
+    $viewers = $stmt->fetchAll();
+    echo json_encode(['count' => count($viewers), 'viewers' => $viewers]);
     exit;
 }
 

@@ -42,13 +42,41 @@ $stmt = $pdo->prepare('SELECT * FROM usuarios WHERE id=?');
 $stmt->execute([$user_id]);
 $me   = $stmt->fetch();
 
+// Solo contactos del usuario logueado
 $stmt = $pdo->prepare('SELECT u.* FROM contactos c JOIN usuarios u ON c.contacto_id=u.id WHERE c.usuario_id=?');
 $stmt->execute([$user_id]);
 $chat_list = $stmt->fetchAll();
 
-$stmt = $pdo->prepare('SELECT h.*,u.username,u.avatar_url FROM historias h JOIN usuarios u ON h.usuario_id=u.id WHERE h.created_at >= NOW() - INTERVAL 1 DAY ORDER BY h.created_at DESC');
-$stmt->execute();
+// IDs de contactos para filtrar historias en frontend
+$contact_ids = array_column($chat_list, 'id');
+$contact_ids[] = (int)$user_id; // incluir las propias
+
+// Historias solo de contactos + propias (48h)
+$stmt = $pdo->prepare('
+    SELECT h.*,u.username,u.avatar_url,u.nombre FROM historias h
+    JOIN usuarios u ON h.usuario_id=u.id
+    WHERE h.created_at >= NOW() - INTERVAL 48 HOUR
+      AND (
+          h.usuario_id = ?
+          OR h.usuario_id IN (
+              SELECT c.contacto_id FROM contactos c WHERE c.usuario_id=?
+          )
+      )
+    ORDER BY h.created_at DESC
+');
+$stmt->execute([$user_id,$user_id]);
 $stories = $stmt->fetchAll();
+
+// Solicitudes pendientes recibidas
+$stmt = $pdo->prepare('
+    SELECT s.id, s.remitente_id, s.created_at, u.username, u.nombre, u.avatar_url
+    FROM solicitudes s
+    JOIN usuarios u ON u.id = s.remitente_id
+    WHERE s.destinatario_id=? AND s.estado=?
+    ORDER BY s.created_at DESC
+');
+$stmt->execute([$user_id,'pendiente']);
+$pending_requests = $stmt->fetchAll();
 
 $is_dark    = ($me['theme_mode']??'dark')==='dark';
 $bubble_col = $me['bubble_color'] ?? '#18033B';
@@ -112,6 +140,41 @@ $txt2  = $is_dark ? '#aaaaaa' : '#6b7280';
   /* Color swatch */
   .cswatch{width:34px;height:34px;border-radius:50%;cursor:pointer;border:2px solid transparent;}
   .cswatch.sel{border-color:#fff;box-shadow:0 0 0 2px var(--bubble);}
+
+  /* Badge notificación */
+  .notif-badge{
+    position:absolute;top:-2px;right:-2px;min-width:16px;height:16px;
+    background:#ef4444;border-radius:10px;font-size:10px;font-weight:700;
+    color:#fff;display:none;align-items:center;justify-content:center;
+    padding:0 3px;border:1.5px solid <?= $bg2 ?>;
+  }
+  .notif-badge.show{display:flex;}
+
+  /* Ícono de video en historia */
+  .story-video-badge{
+    position:absolute;bottom:0;right:0;background:rgba(0,0,0,0.7);
+    border-radius:50%;width:18px;height:18px;display:flex;
+    align-items:center;justify-content:center;font-size:9px;
+  }
+
+  /* Solicitudes de contacto */
+  .request-card{
+    display:flex;align-items:center;gap:10px;padding:10px 14px;
+    background:<?= $bg3 ?>;border-radius:14px;margin-bottom:8px;
+  }
+  .req-btn{
+    padding:6px 12px;border-radius:10px;font-size:12px;font-weight:600;
+    border:none;cursor:pointer;
+  }
+  .req-btn.accept{background:<?= $bubble_col ?>;color:#fff;}
+  .req-btn.reject{background:rgba(239,68,68,0.15);color:#ef4444;}
+
+  /* Unread badge en lista chats */
+  .unread-badge{
+    min-width:20px;height:20px;background:#ef4444;border-radius:10px;
+    font-size:11px;font-weight:700;color:#fff;
+    display:flex;align-items:center;justify-content:center;padding:0 4px;
+  }
 </style>
 </head>
 <body>
@@ -126,8 +189,32 @@ $txt2  = $is_dark ? '#aaaaaa' : '#6b7280';
     </button>
   </header>
 
-  <!-- Historias -->
+  <!-- Solicitudes pendientes (si las hay) -->
+  <?php if(!empty($pending_requests)): ?>
+  <div id="requests-section" style="padding:10px 14px;border-bottom:1px solid <?= $bord ?>;flex-shrink:0;">
+    <div style="font-size:11px;font-weight:600;color:<?= $txt2 ?>;margin-bottom:8px;letter-spacing:0.5px;">
+      SOLICITUDES DE CONTACTO (<?= count($pending_requests) ?>)
+    </div>
+    <?php foreach($pending_requests as $req): ?>
+    <div class="request-card" id="req-card-<?= $req['id'] ?>">
+      <img src="<?= htmlspecialchars($req['avatar_url']?:'https://ui-avatars.com/api/?name='.urlencode($req['username']).'&background=18033B&color=fff') ?>"
+           style="width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;color:<?= $txt ?>;font-size:13px;"><?= htmlspecialchars($req['nombre']?:$req['username']) ?></div>
+        <div style="font-size:11px;color:<?= $txt2 ?>;">@<?= htmlspecialchars($req['username']) ?></div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button class="req-btn accept" onclick="acceptRequest(<?= $req['id'] ?>)">Aceptar</button>
+        <button class="req-btn reject" onclick="rejectRequest(<?= $req['id'] ?>)">Rechazar</button>
+      </div>
+    </div>
+    <?php endforeach; ?>
+  </div>
+  <?php endif; ?>
+
+  <!-- Historias — solo de contactos (ya filtradas en PHP) -->
   <div style="padding:12px 14px;display:flex;gap:12px;overflow-x:auto;border-bottom:1px solid <?= $bord ?>;flex-shrink:0;" class="no-scroll">
+    <!-- Mi historia -->
     <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;">
       <form action="ajax.php?action=upload_story" method="POST" enctype="multipart/form-data" id="form-story">
         <label style="width:50px;height:50px;border-radius:50%;background:<?= $bubble_col ?>;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:22px;font-weight:300;color:#fff;">+
@@ -137,12 +224,22 @@ $txt2  = $is_dark ? '#aaaaaa' : '#6b7280';
       <span style="font-size:10px;color:<?= $txt2 ?>;">Mi estado</span>
     </div>
     <?php
-      $vistos=[];
-      foreach($stories as $s): if(!in_array($s['usuario_id'],$vistos)): $vistos[]=$s['usuario_id'];
+      $vistos = [];
+      foreach($stories as $s):
+        if(!in_array($s['usuario_id'], $vistos)):
+          $vistos[] = $s['usuario_id'];
+          // Detectar si la historia es video
+          $ext_s = strtolower(pathinfo($s['imagen_url'] ?? '', PATHINFO_EXTENSION));
+          $is_video_story = in_array($ext_s, ['mp4','webm','mov']);
     ?>
     <a href="ver_historias.php?username=<?= urlencode($s['username']) ?>" style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;text-decoration:none;">
-      <div style="width:50px;height:50px;border-radius:50%;padding:2px;background:linear-gradient(135deg,<?= $bubble_col ?>,#7c3aed);">
-        <img src="<?= htmlspecialchars($s['avatar_url']?:'') ?>" style="width:100%;height:100%;border-radius:50%;object-fit:cover;border:2px solid <?= $bg ?>;">
+      <div style="position:relative;">
+        <div style="width:50px;height:50px;border-radius:50%;padding:2px;background:linear-gradient(135deg,<?= $bubble_col ?>,#7c3aed);">
+          <img src="<?= htmlspecialchars($s['avatar_url']?:'') ?>" style="width:100%;height:100%;border-radius:50%;object-fit:cover;border:2px solid <?= $bg ?>;">
+        </div>
+        <?php if($is_video_story): ?>
+        <div class="story-video-badge">▶</div>
+        <?php endif; ?>
       </div>
       <span style="font-size:10px;color:<?= $txt2 ?>;max-width:52px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@<?= htmlspecialchars($s['username']) ?></span>
     </a>
@@ -159,13 +256,14 @@ $txt2  = $is_dark ? '#aaaaaa' : '#6b7280';
       </div>
     <?php else: ?>
       <?php foreach($chat_list as $c): ?>
-        <a href="chat.php?contact_id=<?= $c['id'] ?>" style="display:flex;align-items:center;gap:12px;padding:10px 8px;border-radius:14px;text-decoration:none;transition:background 0.15s;" onmouseover="this.style.background='<?= $bg3 ?>'" onmouseout="this.style.background='transparent'">
+        <a href="chat.php?contact_id=<?= $c['id'] ?>" id="chat-row-<?= $c['id'] ?>" style="display:flex;align-items:center;gap:12px;padding:10px 8px;border-radius:14px;text-decoration:none;transition:background 0.15s;" onmouseover="this.style.background='<?= $bg3 ?>'" onmouseout="this.style.background='transparent'">
           <img src="<?= htmlspecialchars($c['avatar_url']?:'https://ui-avatars.com/api/?name='.urlencode($c['username']).'&background=18033B&color=fff') ?>" style="width:46px;height:46px;border-radius:50%;object-fit:cover;flex-shrink:0;">
           <div style="flex:1;min-width:0;">
             <div style="font-weight:600;color:<?= $txt ?>;font-size:14px;"><?= htmlspecialchars($c['nombre']?:$c['username']) ?></div>
             <div style="font-size:12px;color:<?= $txt2 ?>;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?= htmlspecialchars($c['bio']??'') ?></div>
           </div>
-          <div style="flex-shrink:0;">
+          <div style="flex-shrink:0;display:flex;align-items:center;gap:6px;">
+            <span class="unread-badge" id="badge-<?= $c['id'] ?>" style="display:none;"></span>
             <svg fill="none" stroke="<?= $txt2 ?>" stroke-width="2" viewBox="0 0 24 24" style="width:16px;height:16px;"><path d="M9 5l7 7-7 7"/></svg>
           </div>
         </a>
@@ -175,7 +273,7 @@ $txt2  = $is_dark ? '#aaaaaa' : '#6b7280';
 </div>
 
 <!-- ═══ VISTA AÑADIR ══════════════════════════════════════════════════════════ -->
-<div id="view-add" class="view hidden" style="padding:20px 16px;">
+<div id="view-add" class="view hidden" style="padding:20px 16px;overflow-y:auto;">
   <h2 style="font-size:17px;font-weight:700;color:<?= $txt ?>;margin-bottom:18px;">Añadir contacto</h2>
   <form method="POST" style="display:flex;gap:10px;">
     <input type="text" name="add_username" placeholder="@nombre_usuario" class="inp" style="flex:1;" required>
@@ -232,7 +330,7 @@ $txt2  = $is_dark ? '#aaaaaa' : '#6b7280';
     </div>
     <div class="srow" onclick="openSub('appearance')">
       <div class="srow-left">
-        <div class="sicon" style="background:#059669 20;"><svg fill="none" stroke="#059669" stroke-width="2" viewBox="0 0 24 24" style="width:18px;height:18px;"><path d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg></div>
+        <div class="sicon" style="background:#05966920;"><svg fill="none" stroke="#059669" stroke-width="2" viewBox="0 0 24 24" style="width:18px;height:18px;"><path d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg></div>
         <div>
           <div style="font-size:14px;color:<?= $txt ?>;font-weight:500;">Apariencia</div>
           <div style="font-size:11px;color:<?= $txt2 ?>;">Tema, fondo y color de burbujas</div>
@@ -280,12 +378,18 @@ $txt2  = $is_dark ? '#aaaaaa' : '#6b7280';
 
 <!-- ═══ NAVBAR ════════════════════════════════════════════════════════════════ -->
 <footer style="height:58px;background:<?= $bg2 ?>;border-top:1px solid <?= $bord ?>;display:flex;align-items:center;justify-content:around;flex-shrink:0;padding:0 10px;">
-  <button onclick="switchSec('chats')" id="nav-chats" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;padding:6px;border:none;background:transparent;color:<?= $bubble_col ?>;">
-    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:22px;height:22px;"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+  <button onclick="switchSec('chats')" id="nav-chats" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;padding:6px;border:none;background:transparent;color:<?= $bubble_col ?>;position:relative;">
+    <div style="position:relative;">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:22px;height:22px;"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+      <span class="notif-badge" id="badge-chat-total"></span>
+    </div>
     <span style="font-size:10px;font-weight:600;">Chats</span>
   </button>
-  <button onclick="switchSec('add')" id="nav-add" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;padding:6px;border:none;background:transparent;color:<?= $txt2 ?>;">
-    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:22px;height:22px;"><path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+  <button onclick="switchSec('add')" id="nav-add" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;padding:6px;border:none;background:transparent;color:<?= $txt2 ?>;position:relative;">
+    <div style="position:relative;">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:22px;height:22px;"><path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+      <span class="notif-badge" id="badge-requests"></span>
+    </div>
     <span style="font-size:10px;font-weight:600;">Amigos</span>
   </button>
   <button onclick="switchSec('settings')" id="nav-settings" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;padding:6px;border:none;background:transparent;color:<?= $txt2 ?>;">
@@ -408,6 +512,8 @@ $txt2  = $is_dark ? '#aaaaaa' : '#6b7280';
   </div>
 </div>
 
+<div id="home-toast" style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#22c55e;color:#fff;padding:9px 18px;border-radius:12px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;"></div>
+
 <script>
 const BUBBLE = '<?= addslashes($bubble_col) ?>';
 const INIT   = '<?= addslashes($init_sec) ?>';
@@ -454,6 +560,101 @@ function selectBg(val) {
   document.querySelectorAll('.bg-preset').forEach(p => p.classList.remove('sel'));
   event.currentTarget?.classList.add('sel');
 }
+
+// ── TOAST HOME ─────────────────────────────────────────────────────────────
+function showHomeToast(msg, type='ok') {
+  const t = document.getElementById('home-toast');
+  t.textContent = msg;
+  t.style.background = type==='error' ? '#ef4444' : '#22c55e';
+  t.style.opacity = '1';
+  clearTimeout(t._t);
+  t._t = setTimeout(()=>t.style.opacity='0', 2500);
+}
+
+// ── SOLICITUDES DE CONTACTO ────────────────────────────────────────────────
+function acceptRequest(reqId) {
+  const fd = new FormData();
+  fd.append('req_id', reqId);
+  fetch('ajax.php?action=accept_request', {method:'POST', body:fd})
+    .then(r=>r.json())
+    .then(d => {
+      if(d.status==='ok') {
+        document.getElementById('req-card-'+reqId)?.remove();
+        showHomeToast('✓ Contacto aceptado');
+        setTimeout(()=>location.reload(), 1200);
+      } else {
+        showHomeToast(d.error||'Error','error');
+      }
+    }).catch(()=>showHomeToast('Error de red','error'));
+}
+function rejectRequest(reqId) {
+  const fd = new FormData();
+  fd.append('req_id', reqId);
+  fetch('ajax.php?action=reject_request', {method:'POST', body:fd})
+    .then(r=>r.json())
+    .then(d => {
+      if(d.status==='ok') {
+        document.getElementById('req-card-'+reqId)?.remove();
+        showHomeToast('Solicitud rechazada');
+      } else {
+        showHomeToast(d.error||'Error','error');
+      }
+    }).catch(()=>showHomeToast('Error de red','error'));
+}
+
+// ── POLLING NOTIFICACIONES (cada 8 segundos) ───────────────────────────────
+function fetchNotifications() {
+  fetch('ajax.php?action=fetch_notifications')
+    .then(r=>r.json())
+    .then(data => {
+      if(!data) return;
+
+      // Badge total en ícono chats
+      const totalUnread = data.total_unread || 0;
+      const chatBadge = document.getElementById('badge-chat-total');
+      if(chatBadge) {
+        if(totalUnread > 0) {
+          chatBadge.textContent = totalUnread > 99 ? '99+' : totalUnread;
+          chatBadge.classList.add('show');
+        } else {
+          chatBadge.classList.remove('show');
+        }
+      }
+
+      // Badges individuales por conversación
+      const unread = data.unread || {};
+      Object.entries(unread).forEach(([senderId, count]) => {
+        const badge = document.getElementById('badge-' + senderId);
+        if(badge) {
+          badge.textContent = count > 99 ? '99+' : count;
+          badge.style.display = 'flex';
+        }
+      });
+      // Ocultar badges de contactos sin mensajes no leídos
+      document.querySelectorAll('[id^="badge-"]').forEach(el => {
+        const sid = el.id.replace('badge-','');
+        if(sid === 'chat-total' || sid === 'requests') return;
+        if(!unread[sid]) {
+          el.style.display = 'none';
+        }
+      });
+
+      // Badge solicitudes
+      const reqBadge = document.getElementById('badge-requests');
+      if(reqBadge) {
+        const pendCount = data.pending_requests || 0;
+        if(pendCount > 0) {
+          reqBadge.textContent = pendCount;
+          reqBadge.classList.add('show');
+        } else {
+          reqBadge.classList.remove('show');
+        }
+      }
+    }).catch(()=>{});
+}
+
+fetchNotifications();
+setInterval(fetchNotifications, 8000);
 </script>
 </body>
 </html>

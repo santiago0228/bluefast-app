@@ -78,6 +78,22 @@ html,body{
   border-radius:18px 18px 18px 4px;border:1px solid #2a2a38;
 }
 
+/* ── DOBLE CHECK ───────────────────────────────────────────────────── */
+.msg-check{font-size:11px;margin-left:4px;display:inline;}
+.msg-check.sent{color:rgba(255,255,255,0.4);}
+.msg-check.read{color:#a78bfa;}
+
+/* ── MENSAJE FIJADO (barra superior) ───────────────────────────────── */
+#pinned-bar{
+  display:none;background:#111118;border-bottom:1px solid #2a2a38;
+  padding:8px 14px;flex-shrink:0;align-items:center;gap:8px;cursor:pointer;
+}
+#pinned-bar.visible{display:flex;}
+#pinned-bar-text{
+  flex:1;font-size:12px;color:#aaa;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
 /* ── MENÚ CONTEXTUAL ────────────────────────────────────────────────── */
 .ctx-menu{
   display:none;position:fixed;
@@ -148,6 +164,13 @@ html,body{
 }
 .icon-btn:hover{background:#2a2a38;}
 .icon-btn svg{width:21px;height:21px;}
+
+/* ── INDICADOR ESCRIBIENDO ──────────────────────────────────────────── */
+#typing-indicator{
+  font-size:11px;color:#a78bfa;display:none;
+  animation:blink .9s infinite;
+}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.4;}}
 
 /* ── INPUT BAR ──────────────────────────────────────────────────────── */
 #input-bar{
@@ -266,6 +289,28 @@ html,body{
   background:#1a1a26;color:#666;
   font-size:11px;padding:3px 10px;border-radius:10px;
 }
+
+/* ── REPRODUCTOR DE AUDIO CUSTOM ────────────────────────────────────── */
+.audio-player{
+  display:flex;align-items:center;gap:8px;
+  background:rgba(0,0,0,0.25);border-radius:14px;
+  padding:8px 10px;margin-top:6px;width:220px;max-width:100%;
+}
+.audio-play-btn{
+  width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  background:rgba(255,255,255,0.15);color:#fff;font-size:13px;transition:background .15s;
+}
+.audio-play-btn:hover{background:rgba(255,255,255,0.28);}
+.audio-wave{
+  display:flex;align-items:center;gap:2px;flex:1;height:24px;cursor:pointer;
+}
+.audio-wave-bar{
+  width:3px;border-radius:3px;background:rgba(255,255,255,0.4);
+  transition:background .15s;flex-shrink:0;
+}
+.audio-wave-bar.active{background:rgba(255,255,255,0.9);}
+.audio-time-label{font-size:10px;color:rgba(255,255,255,0.55);white-space:nowrap;flex-shrink:0;}
 </style>
 </head>
 <body>
@@ -289,7 +334,8 @@ html,body{
       <div style="font-weight:600;font-size:15px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
         <?= htmlspecialchars($partner['nombre'] ?: $partner['username']) ?>
       </div>
-      <div style="font-size:11px;color:#555;">@<?= htmlspecialchars($partner['username']) ?></div>
+      <div id="typing-indicator">escribiendo...</div>
+      <div id="partner-username" style="font-size:11px;color:#555;">@<?= htmlspecialchars($partner['username']) ?></div>
     </div>
   </div>
 
@@ -327,6 +373,12 @@ html,body{
     </div>
   </div>
 </header>
+
+<!-- ═══ BARRA MENSAJE FIJADO ══════════════════════════════════════════ -->
+<div id="pinned-bar" onclick="scrollToPinned()">
+  <span style="font-size:16px;">📌</span>
+  <span id="pinned-bar-text"></span>
+</div>
 
 <!-- ═══ BARRA BÚSQUEDA ════════════════════════════════════════════════ -->
 <div id="search-bar">
@@ -392,7 +444,7 @@ html,body{
   </button>
 
   <textarea id="msg-input" rows="1" placeholder="Mensaje..."
-            oninput="onInputChange(this)"></textarea>
+            oninput="onInputChange(this)" onkeydown="handleInputKeydown(event)"></textarea>
 
   <button id="audio-btn" onclick="toggleAudio()" class="icon-btn" style="flex-shrink:0;" aria-label="Audio">
     <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 016 0v6a3 3 0 01-3 3z"/></svg>
@@ -428,6 +480,12 @@ html,body{
   <div class="ctx-item" onclick="ctxCopy()">
     <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:16px;height:16px;flex-shrink:0;"><path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
     Copiar
+  </div>
+
+  <!-- Fijar / Desfijar -->
+  <div class="ctx-item" id="ctx-pin-btn" onclick="ctxPin()">
+    <span style="font-size:15px;width:16px;text-align:center;flex-shrink:0;">📌</span>
+    <span id="ctx-pin-label">Fijar mensaje</span>
   </div>
 
   <!-- Eliminar (solo mis mensajes) -->
@@ -586,6 +644,8 @@ function openCtxMenu(e, msg, isMe) {
   const menu = document.getElementById('ctx-menu');
   document.getElementById('ctx-delete-btn').style.display = isMe ? 'flex' : 'none';
   document.getElementById('ctx-react-text-input').value = '';
+  // Actualizar label fijar
+  document.getElementById('ctx-pin-label').textContent = msg.fijado ? 'Desfijar mensaje' : 'Fijar mensaje';
   menu.classList.add('open');
   const app  = document.getElementById('app');
   const rect = app.getBoundingClientRect();
@@ -611,7 +671,6 @@ function ctxReactText() {
   const inp  = document.getElementById('ctx-react-text-input');
   const text = inp.value.trim();
   if(!text) return;
-  // Enviar como mensaje de reacción con texto
   const fd = new FormData();
   fd.append('mensaje', '💬 ' + text);
   fd.append('reply_to', ctxMsg.id);
@@ -639,6 +698,20 @@ function ctxDelete() {
     .then(d => {
       if(d.status==='ok') { loadMessages(); showToast('Mensaje eliminado'); }
       else showToast(d.error||'Error','error');
+    });
+  closeCtxMenu();
+}
+function ctxPin() {
+  if(!ctxMsg) return;
+  const fd = new FormData();
+  fd.append('msg_id', ctxMsg.id);
+  fetch('ajax.php?action=pin_msg', {method:'POST', body:fd})
+    .then(r=>r.json())
+    .then(d => {
+      if(d.status==='ok') {
+        showToast(d.fijado ? '📌 Mensaje fijado' : 'Mensaje desfijado');
+        loadMessages();
+      } else showToast(d.error||'Error','error');
     });
   closeCtxMenu();
 }
@@ -704,16 +777,22 @@ function insertEmoji(em) {
 }
 
 /* ── INPUT HANDLING ────────────────────────────────────────────────── */
+let typingDebounce = null;
 function onInputChange(ta) {
   ta.style.height = 'auto';
   ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
   const hasText = ta.value.trim().length > 0;
   document.getElementById('send-btn').style.display  = hasText ? 'flex' : 'none';
   document.getElementById('audio-btn').style.display = hasText ? 'none' : 'flex';
+  // Notificar "escribiendo..."
+  clearTimeout(typingDebounce);
+  typingDebounce = setTimeout(() => {
+    fetch('ajax.php?action=typing&contact_id=' + PARTNER, {method:'POST'}).catch(()=>{});
+  }, 400);
 }
-document.getElementById('msg-input').addEventListener('keydown', e => {
+function handleInputKeydown(e) {
   if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-});
+}
 
 /* ── AUDIO RECORDING ───────────────────────────────────────────────── */
 let mediaRec = null, audioChunks = [], isRecording = false;
@@ -754,6 +833,83 @@ function stopRecording() {
   document.getElementById('audio-btn').classList.remove('recording');
 }
 
+/* ── REPRODUCTOR AUDIO CUSTOM ──────────────────────────────────────── */
+function createAudioPlayer(src) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'audio-player';
+
+  const audio = new Audio(src);
+
+  const playBtn = document.createElement('button');
+  playBtn.className = 'audio-play-btn';
+  playBtn.innerHTML = '▶';
+
+  // Onda simulada con barras de altura variable
+  const wave = document.createElement('div');
+  wave.className = 'audio-wave';
+  const barCount = 20;
+  const bars = [];
+  const heights = Array.from({length: barCount}, () => 20 + Math.floor(Math.random() * 70));
+  heights.forEach(h => {
+    const bar = document.createElement('div');
+    bar.className = 'audio-wave-bar';
+    bar.style.height = h + '%';
+    wave.appendChild(bar);
+    bars.push(bar);
+  });
+
+  const timeLabel = document.createElement('span');
+  timeLabel.className = 'audio-time-label';
+  timeLabel.textContent = '0:00';
+
+  wrapper.appendChild(playBtn);
+  wrapper.appendChild(wave);
+  wrapper.appendChild(timeLabel);
+
+  let playing = false;
+
+  function fmt(s) {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return m + ':' + String(sec).padStart(2,'0');
+  }
+
+  function updateBars() {
+    if(!audio.duration) return;
+    const pct = audio.currentTime / audio.duration;
+    const active = Math.floor(pct * barCount);
+    bars.forEach((b, i) => b.classList.toggle('active', i <= active));
+    timeLabel.textContent = fmt(audio.currentTime) + ' / ' + fmt(audio.duration);
+  }
+
+  audio.addEventListener('timeupdate', updateBars);
+  audio.addEventListener('ended', () => {
+    playing = false;
+    playBtn.innerHTML = '▶';
+    bars.forEach(b => b.classList.remove('active'));
+    timeLabel.textContent = '0:00 / ' + fmt(audio.duration || 0);
+  });
+  audio.addEventListener('loadedmetadata', () => {
+    timeLabel.textContent = '0:00 / ' + fmt(audio.duration);
+  });
+
+  playBtn.onclick = () => {
+    if(playing) { audio.pause(); playBtn.innerHTML = '▶'; playing = false; }
+    else        { audio.play(); playBtn.innerHTML = '⏸'; playing = true; }
+  };
+
+  // Click en la ola para seek
+  wave.addEventListener('click', e => {
+    if(!audio.duration) return;
+    const rect = wave.getBoundingClientRect();
+    const pct = (e.clientX - rect.left) / rect.width;
+    audio.currentTime = pct * audio.duration;
+    updateBars();
+  });
+
+  return wrapper;
+}
+
 /* ── SEND MESSAGE ──────────────────────────────────────────────────── */
 function sendMessage() {
   const input = document.getElementById('msg-input');
@@ -770,6 +926,26 @@ function sendMessage() {
     .catch(()=>showToast('Error al enviar','error'));
 }
 
+/* ── MENSAJE FIJADO ────────────────────────────────────────────────── */
+let pinnedMsgId = null;
+function updatePinnedBar(msgs) {
+  const pinned = msgs.slice().reverse().find(m => m.fijado);
+  const bar = document.getElementById('pinned-bar');
+  if(pinned) {
+    pinnedMsgId = pinned.id;
+    document.getElementById('pinned-bar-text').textContent = (pinned.contenido || '[archivo]').substring(0, 60);
+    bar.classList.add('visible');
+  } else {
+    pinnedMsgId = null;
+    bar.classList.remove('visible');
+  }
+}
+function scrollToPinned() {
+  if(!pinnedMsgId) return;
+  const el = document.querySelector('[data-msg-id="' + pinnedMsgId + '"]');
+  if(el) el.scrollIntoView({behavior:'smooth', block:'center'});
+}
+
 /* ── LOAD MESSAGES ─────────────────────────────────────────────────── */
 let lastCount = 0;
 function loadMessages() {
@@ -779,12 +955,18 @@ function loadMessages() {
   .then(msgs => {
     if(!Array.isArray(msgs)) return;
 
+    // Marcar como leídos automáticamente
+    fetch('ajax.php?action=mark_read&contact_id=' + PARTNER, {method:'POST'}).catch(()=>{});
+
     let filtered = msgs;
     if(searchQ) {
       filtered = msgs.filter(m =>
         (m.contenido || '').toLowerCase().includes(searchQ.toLowerCase())
       );
     }
+
+    // Actualizar barra de mensaje fijado
+    updatePinnedBar(msgs);
 
     const box   = document.getElementById('chat-box');
     const atBot = box.scrollHeight - box.scrollTop - box.clientHeight < 100;
@@ -824,6 +1006,7 @@ function loadMessages() {
       row.className = 'msg-row ' + (isMe ? 'me' : 'them');
       const bubble = document.createElement('div');
       bubble.className = 'bubble ' + (isMe ? 'me' : 'them');
+      bubble.dataset.msgId = m.id; // para scroll a fijado
 
       let inner = '';
 
@@ -836,24 +1019,52 @@ function loadMessages() {
 
       if(m.contenido) inner += `<div>${escHtml(m.contenido)}</div>`;
 
-      const tipo = m.tipo || '';
+      function tipoByUrl(url) {
+        if(!url) return '';
+        const ext = (url.split('.').pop()||'').toLowerCase().split('?')[0];
+        if(['jpg','jpeg','png','webp','gif'].includes(ext)) return 'imagen';
+        if(['mp4','webm','mov'].includes(ext))              return 'video';
+        if(['mp3','ogg','m4a'].includes(ext))               return 'audio';
+        return 'archivo';
+      }
+      const tipo = m.tipo || tipoByUrl(m.archivo_url);
+
       if(tipo==='imagen'||tipo==='image') {
         inner += `<img src="${escAttr(m.archivo_url)}" style="max-width:100%;border-radius:10px;margin-top:6px;cursor:pointer;display:block;" onclick="window.open('${escAttr(m.archivo_url)}')">`;
       } else if(tipo==='video') {
         inner += `<video src="${escAttr(m.archivo_url)}" controls style="max-width:100%;border-radius:10px;margin-top:6px;display:block;"></video>`;
-      } else if(tipo==='audio') {
-        inner += `<audio src="${escAttr(m.archivo_url)}" controls style="margin-top:6px;width:100%;max-width:220px;display:block;"></audio>`;
       } else if(tipo==='archivo'||tipo==='documento') {
         const fname = (m.archivo_url||'').split('/').pop();
         inner += `<a href="${escAttr(m.archivo_url)}" target="_blank" rel="noopener" style="color:#a78bfa;font-size:12px;margin-top:4px;display:flex;align-items:center;gap:4px;text-decoration:none;">📎 ${escHtml(fname)}</a>`;
       }
 
-      if(hora) inner += `<span class="msg-time" style="text-align:${isMe?'right':'left'};">${hora}</span>`;
+      // Timestamp + doble check
+      if(hora) {
+        let checkHtml = '';
+        if(isMe) {
+          if(m.leido) {
+            checkHtml = `<span class="msg-check read" title="Leído">✓✓</span>`;
+          } else {
+            checkHtml = `<span class="msg-check sent" title="Enviado">✓</span>`;
+          }
+        }
+        inner += `<span class="msg-time" style="text-align:${isMe?'right':'left'};">${hora}${checkHtml}</span>`;
+      }
+
+      // Indicador de mensaje fijado dentro de la burbuja
+      if(m.fijado) {
+        inner += `<span style="font-size:10px;opacity:0.5;margin-top:2px;display:block;text-align:${isMe?'right':'left'};">📌 fijado</span>`;
+      }
 
       bubble.innerHTML = inner;
 
+      // Insertar reproductor audio custom (reemplaza el <audio> básico)
+      if(tipo === 'audio') {
+        bubble.appendChild(createAudioPlayer(m.archivo_url || ''));
+      }
+
       /* Long press / context menu */
-      const msgData = {id: m.id, texto: m.contenido||'', user: isMe?'yo':(m.reply_user||'usuario'), isMe};
+      const msgData = {id: m.id, texto: m.contenido||'', user: isMe?'yo':(m.reply_user||'usuario'), isMe, fijado: m.fijado||0};
       let pressTimer;
       bubble.addEventListener('touchstart', e => { pressTimer = setTimeout(() => openCtxMenu(e.touches[0], msgData, isMe), 480); }, {passive:true});
       bubble.addEventListener('touchend',   () => clearTimeout(pressTimer));
@@ -885,6 +1096,26 @@ function loadMessages() {
       lastCount = filtered.length;
     }
   }).catch(()=>{});
+}
+
+/* ── INDICADOR ESCRIBIENDO ─────────────────────────────────────────── */
+let typingVisible = false;
+function checkTyping() {
+  fetch('ajax.php?action=check_typing&contact_id=' + PARTNER)
+    .then(r=>r.json())
+    .then(d => {
+      const ind  = document.getElementById('typing-indicator');
+      const sub  = document.getElementById('partner-username');
+      if(d.typing) {
+        ind.style.display = 'block';
+        sub.style.display = 'none';
+        typingVisible = true;
+      } else {
+        ind.style.display = 'none';
+        sub.style.display = 'block';
+        typingVisible = false;
+      }
+    }).catch(()=>{});
 }
 
 /* ── BLOCK / REPORT / CLEAR ────────────────────────────────────────── */
@@ -927,6 +1158,7 @@ function escAttr(s) {
 buildEmojiGrid();
 loadMessages();
 setInterval(loadMessages, 3000);
+setInterval(checkTyping, 2000);
 </script>
 </body>
 </html>

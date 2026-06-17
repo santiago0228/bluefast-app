@@ -17,6 +17,8 @@ $story_owner = $stmt->fetchColumn();
 
 if (!$story_owner) { header('Location: home.php'); exit; }
 
+$story_owner = (int)$story_owner;
+
 if ($story_owner !== $viewer_id) {
     $chk = $pdo->prepare('
         SELECT id FROM contactos
@@ -120,6 +122,42 @@ $is_own = ($story_owner === $viewer_id);
             display:none;
         }
 
+        /* Contador de vistas */
+        #views-counter{
+            position:absolute;top:72px;left:14px;z-index:25;
+            display:none;align-items:center;gap:5px;
+            background:rgba(0,0,0,0.55);border-radius:20px;
+            padding:5px 10px;cursor:pointer;
+        }
+        #views-counter.visible{display:flex;}
+        #views-count-num{font-size:13px;color:#fff;font-weight:600;}
+
+        /* Panel de vistas */
+        #views-panel{
+            position:absolute;bottom:0;left:0;right:0;z-index:40;
+            background:#111118;border-radius:20px 20px 0 0;
+            padding:16px;max-height:60vh;overflow-y:auto;
+            display:none;
+        }
+        #views-panel.open{display:block;}
+        .viewer-row{
+            display:flex;align-items:center;gap:10px;
+            padding:8px 0;border-bottom:1px solid #1e1e28;
+        }
+        .viewer-row:last-child{border-bottom:none;}
+
+        /* Contenedor media (imagen o video) */
+        #story-media-wrap{
+            width:100%;height:100%;display:flex;
+            align-items:center;justify-content:center;
+            position:absolute;top:0;left:0;
+        }
+        #story-img{max-width:100%;max-height:100%;object-fit:contain;display:none;}
+        #story-video{
+            max-width:100%;max-height:100%;object-fit:contain;
+            display:none;background:#000;
+        }
+
         /* Corazón animado flotante */
         .floating-heart{
             position:absolute;font-size:36px;z-index:100;
@@ -163,13 +201,25 @@ $is_own = ($story_owner === $viewer_id);
         </div>
     </div>
 
-    <!-- Imagen de la historia -->
-    <div class="w-full h-full flex items-center justify-center select-none">
-        <img id="story-img" src="" style="max-width:100%;max-height:100%;object-fit:contain;">
+    <!-- Contenedor de media (imagen o video) -->
+    <div id="story-media-wrap">
+        <img id="story-img" src="" alt="">
+        <video id="story-video" playsinline muted autoplay></video>
     </div>
 
     <!-- Tiempo restante -->
     <div id="story-timer"><span id="timer-text"></span></div>
+
+    <!-- Contador de vistas (solo propias) -->
+    <?php if($is_own): ?>
+    <div id="views-counter" onclick="openViewsPanel()">
+        <svg fill="none" stroke="#fff" stroke-width="2" viewBox="0 0 24 24" style="width:16px;height:16px;">
+            <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+        </svg>
+        <span id="views-count-num">0</span>
+    </div>
+    <?php endif; ?>
 
     <!-- Botón eliminar (solo para historias propias) -->
     <?php if($is_own): ?>
@@ -190,6 +240,19 @@ $is_own = ($story_owner === $viewer_id);
     </div>
     <?php endif; ?>
 
+    <!-- Panel de vistas (solo propias) -->
+    <?php if($is_own): ?>
+    <div id="views-panel">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <span style="font-size:14px;font-weight:700;color:#fff;">👁 Vistas</span>
+            <span onclick="closeViewsPanel()" style="color:#888;font-size:22px;cursor:pointer;line-height:1;">×</span>
+        </div>
+        <div id="viewers-list">
+            <div style="color:#666;font-size:13px;text-align:center;padding:20px 0;">Cargando...</div>
+        </div>
+    </div>
+    <?php endif; ?>
+
 </div>
 
 <div id="story-toast"></div>
@@ -198,11 +261,20 @@ $is_own = ($story_owner === $viewer_id);
 const stories    = <?= json_encode($user_stories) ?>;
 const IS_OWN     = <?= $is_own ? 'true' : 'false' ?>;
 const VIEWER_ID  = <?= $viewer_id ?>;
+const OWNER_ID   = <?= $story_owner ?>;
 const OWNER_USER = '<?= addslashes(htmlspecialchars($username)) ?>';
 
-let currentIdx = 0;
+let currentIdx  = 0;
 let timeout;
-let heartSent = false;
+let heartSent   = false;
+let storyPaused = false;
+
+/* ── Helpers ──────────────────────────────────────────────────────── */
+function isVideo(url) {
+    if(!url) return false;
+    const ext = url.split('.').pop().toLowerCase().split('?')[0];
+    return ['mp4','webm','mov'].includes(ext);
+}
 
 /* ── Mostrar historia ──────────────────────────────────────────────── */
 function showStory(idx) {
@@ -210,7 +282,28 @@ function showStory(idx) {
     if (idx < 0) idx = 0;
     currentIdx = idx;
 
-    document.getElementById('story-img').src = stories[idx].imagen_url;
+    const story   = stories[idx];
+    const url     = story.imagen_url || '';
+    const imgEl   = document.getElementById('story-img');
+    const vidEl   = document.getElementById('story-video');
+    const storyId = parseInt(story.id);
+
+    // Detener video anterior si lo había
+    vidEl.pause();
+    vidEl.src = '';
+
+    if (isVideo(url)) {
+        imgEl.style.display  = 'none';
+        vidEl.style.display  = 'block';
+        vidEl.src = url;
+        vidEl.load();
+        vidEl.muted  = true;
+        vidEl.play().catch(()=>{});
+    } else {
+        vidEl.style.display  = 'none';
+        imgEl.style.display  = 'block';
+        imgEl.src = url;
+    }
 
     // Rellenar barras previas
     for (let i = 0; i < stories.length; i++) {
@@ -233,17 +326,41 @@ function showStory(idx) {
     // Actualizar tiempo restante
     updateTimer();
 
+    // Registrar vista (si no es propia)
+    if (!IS_OWN && storyId) {
+        registerView(storyId);
+    }
+
+    // Actualizar contador de vistas (si es propia)
+    if (IS_OWN && storyId) {
+        loadViewsCount(storyId);
+    }
+
+    // Para video: avanzar cuando termina
+    vidEl.onended = () => nextStory();
+
+    // Duración: video usa su duración real, imagen usa 5 segundos
+    const duration = isVideo(url) ? null : 5000; // null = espera evento onended
+
     // Iniciar barra de progreso
+    clearTimeout(timeout);
     setTimeout(() => {
         const f = document.getElementById('fill-' + idx);
-        if (f) {
+        if (!f) return;
+        if (isVideo(url)) {
+            // La barra de video se anima en paralelo usando la duración del video
+            vidEl.addEventListener('loadedmetadata', function onMeta() {
+                vidEl.removeEventListener('loadedmetadata', onMeta);
+                const dur = vidEl.duration || 5;
+                f.style.transition = `width ${dur}s linear`;
+                f.style.width = '100%';
+            }, {once: true});
+        } else {
             f.style.transition = 'width 5s linear';
             f.style.width = '100%';
+            timeout = setTimeout(() => nextStory(), 5000);
         }
     }, 80);
-
-    clearTimeout(timeout);
-    timeout = setTimeout(() => nextStory(), 5000);
 }
 
 function nextStory() {
@@ -273,11 +390,90 @@ function updateTimer() {
     const h = Math.floor(diff / 3600000);
     const m = Math.floor((diff % 3600000) / 60000);
     let txt = '';
-    if (h > 0)  txt = `Expira en ${h}h ${m}m`;
-    else        txt = `Expira en ${m} min`;
+    if (h > 0) txt = `Expira en ${h}h ${m}m`;
+    else       txt = `Expira en ${m} min`;
     document.getElementById('timer-text').textContent = txt;
 }
 setInterval(updateTimer, 30000);
+
+/* ── Registrar vista ───────────────────────────────────────────────── */
+function registerView(storyId) {
+    const fd = new FormData();
+    fd.append('story_id', storyId);
+    fetch('ajax.php?action=register_view', {method:'POST', body:fd}).catch(()=>{});
+}
+
+/* ── Cargar contador de vistas ─────────────────────────────────────── */
+function loadViewsCount(storyId) {
+    fetch('ajax.php?action=get_story_views&story_id=' + storyId)
+        .then(r => r.json())
+        .then(d => {
+            const counter = document.getElementById('views-counter');
+            const num     = document.getElementById('views-count-num');
+            if(counter && num) {
+                num.textContent = d.count || 0;
+                counter.classList.add('visible');
+            }
+        }).catch(()=>{});
+}
+
+/* ── Panel de vistas ───────────────────────────────────────────────── */
+function openViewsPanel() {
+    // Pausar historia mientras se consultan las vistas
+    clearTimeout(timeout);
+    const vidEl = document.getElementById('story-video');
+    if(vidEl && !vidEl.paused) vidEl.pause();
+    storyPaused = true;
+
+    document.getElementById('views-panel').classList.add('open');
+    const storyId = parseInt(stories[currentIdx]?.id || 0);
+    if(!storyId) return;
+
+    fetch('ajax.php?action=get_story_views&story_id=' + storyId)
+        .then(r => r.json())
+        .then(d => {
+            const list = document.getElementById('viewers-list');
+            if(!d.viewers || d.viewers.length === 0) {
+                list.innerHTML = '<div style="color:#666;font-size:13px;text-align:center;padding:20px 0;">Nadie ha visto esta historia aún.</div>';
+                return;
+            }
+            list.innerHTML = d.viewers.map(v => `
+                <div class="viewer-row">
+                    <img src="${escHtml(v.avatar_url||'https://ui-avatars.com/api/?name='+encodeURIComponent(v.username||'U')+'&background=18033B&color=fff')}"
+                         style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;">
+                    <div style="flex:1;">
+                        <div style="font-weight:600;color:#fff;font-size:13px;">${escHtml(v.nombre||v.username)}</div>
+                        <div style="font-size:11px;color:#666;">@${escHtml(v.username||'')}</div>
+                    </div>
+                    <div style="font-size:11px;color:#555;">${formatTime(v.visto_at)}</div>
+                </div>
+            `).join('');
+        }).catch(()=>{});
+}
+
+function closeViewsPanel() {
+    document.getElementById('views-panel').classList.remove('open');
+    storyPaused = false;
+    // Reanudar
+    const vidEl = document.getElementById('story-video');
+    if(vidEl && vidEl.src && isVideo(vidEl.src)) {
+        vidEl.play().catch(()=>{});
+    } else {
+        timeout = setTimeout(() => nextStory(), 3000);
+    }
+}
+
+function formatTime(ts) {
+    if(!ts) return '';
+    const d = new Date(ts.replace(' ','T'));
+    if(isNaN(d)) return '';
+    return d.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
+}
+
+function escHtml(s) {
+    if(!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
 /* ── Reacción corazón ──────────────────────────────────────────────── */
 function sendHeartReaction() {
@@ -297,10 +493,9 @@ function sendHeartReaction() {
     if (!heartSent) {
         hb.textContent = '❤️';
         heartSent = true;
-        // Enviar como mensaje al dueño de la historia
         const fd = new FormData();
         fd.append('mensaje', '❤️ Reaccionó a tu historia');
-        fetch('ajax.php?action=send&contact_id=<?= $story_owner ?>', {method:'POST', body:fd})
+        fetch('ajax.php?action=send&contact_id=' + OWNER_ID, {method:'POST', body:fd})
             .catch(() => {});
     }
     showToast('❤️ Reacción enviada');
@@ -317,14 +512,13 @@ function sendStoryReply() {
 
     const fd = new FormData();
     fd.append('mensaje', '💬 Historia: ' + text);
-    fetch('ajax.php?action=send&contact_id=<?= $story_owner ?>', {method:'POST', body:fd})
+    fetch('ajax.php?action=send&contact_id=' + OWNER_ID, {method:'POST', body:fd})
         .then(r => r.json())
         .then(d => {
             if (d.status === 'ok') {
                 showToast('✅ Respuesta enviada');
                 inp.value = '';
                 inp.blur();
-                // Reanudar
                 timeout = setTimeout(() => nextStory(), 5000);
             } else {
                 showToast('Error al enviar', 'error');
@@ -374,9 +568,20 @@ function showToast(msg, type = 'ok') {
 /* ── Pausar al enfocar input ───────────────────────────────────────── */
 const replyInput = document.getElementById('story-reply-input');
 if (replyInput) {
-    replyInput.addEventListener('focus',  () => clearTimeout(timeout));
-    replyInput.addEventListener('blur',   () => {
-        if (!replyInput.value) timeout = setTimeout(() => nextStory(), 3000);
+    replyInput.addEventListener('focus', () => {
+        clearTimeout(timeout);
+        const vidEl = document.getElementById('story-video');
+        if(vidEl && !vidEl.paused) vidEl.pause();
+    });
+    replyInput.addEventListener('blur', () => {
+        if (!replyInput.value) {
+            const vidEl = document.getElementById('story-video');
+            if(vidEl && vidEl.src && isVideo(vidEl.src)) {
+                vidEl.play().catch(()=>{});
+            } else {
+                timeout = setTimeout(() => nextStory(), 3000);
+            }
+        }
     });
 }
 
