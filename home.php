@@ -272,94 +272,28 @@ $txt2  = $is_dark ? '#aaaaaa' : '#6b7280';
   </main>
 </div>
 
-<!-- ═══ VISTA SOCIAL (SEGUIR / SOLICITUDES) ═══════════════════════════════════ -->
-<div id="view-add" class="view hidden" style="display:flex;flex-direction:column;overflow:hidden;">
-
-  <!-- Sub-tabs: Descubrir | Solicitudes -->
-  <div style="display:flex;gap:0;border-bottom:1px solid <?= $bord ?>;flex-shrink:0;background:<?= $bg ?>;">
-    <button id="stab-discover" onclick="switchSocialTab('discover')"
-      style="flex:1;padding:13px 8px;font-size:13px;font-weight:600;border:none;cursor:pointer;
-             border-bottom:2px solid <?= $bubble_col ?>;color:<?= $bubble_col ?>;background:transparent;">
-      🌐 Descubrir
-    </button>
-    <button id="stab-requests" onclick="switchSocialTab('requests')"
-      style="flex:1;padding:13px 8px;font-size:13px;font-weight:600;border:none;cursor:pointer;
-             border-bottom:2px solid transparent;color:<?= $txt2 ?>;background:transparent;position:relative;">
-      🔔 Solicitudes
-      <?php if(!empty($pending_requests)): ?>
-      <span style="position:absolute;top:8px;right:16px;background:#ef4444;color:#fff;
-                   border-radius:10px;font-size:10px;padding:1px 5px;font-weight:700;">
-        <?= count($pending_requests) ?>
-      </span>
-      <?php endif; ?>
-    </button>
-  </div>
-
-  <!-- TAB: DESCUBRIR PERSONAS -->
-  <div id="social-discover" style="flex:1;overflow-y:auto;padding:14px 14px 80px;">
-
-    <!-- Buscar por @usuario -->
-    <form method="POST" style="display:flex;gap:8px;margin-bottom:18px;">
-      <input type="text" name="add_username" placeholder="Buscar por @usuario…" class="inp" style="flex:1;" required>
-      <button type="submit" style="padding:11px 16px;background:<?= $bubble_col ?>;color:#fff;border-radius:14px;font-size:13px;font-weight:600;white-space:nowrap;border:none;cursor:pointer;flex-shrink:0;">Buscar</button>
-    </form>
-
-    <!-- Mis contactos con opción de mensaje -->
-    <div style="font-size:11px;font-weight:600;color:<?= $txt2 ?>;margin-bottom:10px;letter-spacing:0.5px;">
-      MIS CONTACTOS (<?= count($chat_list) ?>)
-    </div>
-    <?php if(empty($chat_list)): ?>
-      <div style="text-align:center;padding:30px 0;color:<?= $txt2 ?>;font-size:13px;">
-        Aún no sigues a nadie.<br>Busca un usuario arriba para empezar.
-      </div>
-    <?php else: ?>
-      <?php foreach($chat_list as $cf): ?>
+<!-- ═══ VISTA AÑADIR ══════════════════════════════════════════════════════════ -->
+<div id="view-add" class="view hidden" style="padding:20px 16px;overflow-y:auto;">
+  <h2 style="font-size:17px;font-weight:700;color:<?= $txt ?>;margin-bottom:18px;">Añadir contacto</h2>
+  <form method="POST" style="display:flex;gap:10px;">
+    <input type="text" name="add_username" placeholder="@nombre_usuario" class="inp" style="flex:1;" required>
+    <button type="submit" style="padding:11px 18px;background:<?= $bubble_col ?>;color:#fff;border-radius:14px;font-size:14px;font-weight:600;white-space:nowrap;border:none;cursor:pointer;">Buscar</button>
+  </form>
+  <?php if(isset($_GET['sec']) && $_GET['sec']==='add' && isset($_GET['added'])): ?>
+    <div style="margin-top:12px;padding:12px 16px;background:#16a34a20;border:1px solid #16a34a40;border-radius:12px;color:#86efac;font-size:13px;">✓ Contacto añadido correctamente.</div>
+  <?php endif; ?>
+  <div style="margin-top:28px;">
+    <div style="font-size:11px;font-weight:600;color:<?= $txt2 ?>;margin-bottom:12px;letter-spacing:0.5px;">MIS CONTACTOS (<?= count($chat_list) ?>)</div>
+    <?php foreach($chat_list as $c): ?>
       <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid <?= $bord ?>;">
-        <img src="<?= htmlspecialchars($cf['avatar_url']?:'https://ui-avatars.com/api/?name='.urlencode($cf['username']).'&background=18033B&color=fff') ?>"
-             style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid <?= $bubble_col ?>;">
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:600;color:<?= $txt ?>;font-size:13px;"><?= htmlspecialchars($cf['nombre']?:$cf['username']) ?></div>
-          <div style="font-size:11px;color:<?= $txt2 ?>;">@<?= htmlspecialchars($cf['username']) ?></div>
-          <?php if(!empty($cf['bio'])): ?>
-          <div style="font-size:11px;color:<?= $txt2 ?>;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?= htmlspecialchars($cf['bio']) ?></div>
-          <?php endif; ?>
+        <img src="<?= htmlspecialchars($c['avatar_url']?:'https://ui-avatars.com/api/?name='.urlencode($c['username']).'&background=18033B&color=fff') ?>" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">
+        <div style="flex:1;">
+          <div style="font-weight:600;color:<?= $txt ?>;font-size:13px;"><?= htmlspecialchars($c['nombre']?:$c['username']) ?></div>
+          <div style="font-size:11px;color:<?= $txt2 ?>;">@<?= htmlspecialchars($c['username']) ?></div>
         </div>
-        <a href="chat.php?contact_id=<?= $cf['id'] ?>"
-           style="padding:7px 14px;background:<?= $bubble_col ?>;color:#fff;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;flex-shrink:0;white-space:nowrap;">
-          Mensaje
-        </a>
+        <a href="chat.php?contact_id=<?= $c['id'] ?>" style="padding:6px 14px;background:<?= $bubble_col ?>;color:#fff;border-radius:10px;font-size:12px;text-decoration:none;">Chat</a>
       </div>
-      <?php endforeach; ?>
-    <?php endif; ?>
-  </div>
-
-  <!-- TAB: SOLICITUDES RECIBIDAS -->
-  <div id="social-requests" style="flex:1;overflow-y:auto;padding:14px 14px 80px;display:none;">
-    <?php if(empty($pending_requests)): ?>
-      <div style="text-align:center;padding:50px 20px;color:<?= $txt2 ?>;font-size:14px;">
-        <div style="font-size:36px;margin-bottom:12px;">🔔</div>
-        No tienes solicitudes pendientes.
-      </div>
-    <?php else: ?>
-      <div style="font-size:11px;font-weight:600;color:<?= $txt2 ?>;margin-bottom:12px;letter-spacing:0.5px;">
-        SOLICITUDES RECIBIDAS (<?= count($pending_requests) ?>)
-      </div>
-      <?php foreach($pending_requests as $req): ?>
-      <div class="request-card" id="req-card-<?= $req['id'] ?>">
-        <img src="<?= htmlspecialchars($req['avatar_url']?:'https://ui-avatars.com/api/?name='.urlencode($req['username']).'&background=18033B&color=fff') ?>"
-             style="width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;">
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:600;color:<?= $txt ?>;font-size:13px;"><?= htmlspecialchars($req['nombre']?:$req['username']) ?></div>
-          <div style="font-size:11px;color:<?= $txt2 ?>;">@<?= htmlspecialchars($req['username']) ?></div>
-          <div style="font-size:10px;color:<?= $txt2 ?>;margin-top:2px;">quiere seguirte</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;">
-          <button class="req-btn accept" onclick="acceptRequest(<?= $req['id'] ?>)">✓ Aceptar</button>
-          <button class="req-btn reject" onclick="rejectRequest(<?= $req['id'] ?>)">✕ Rechazar</button>
-        </div>
-      </div>
-      <?php endforeach; ?>
-    <?php endif; ?>
+    <?php endforeach; ?>
   </div>
 </div>
 
@@ -456,7 +390,7 @@ $txt2  = $is_dark ? '#aaaaaa' : '#6b7280';
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:22px;height:22px;"><path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
       <span class="notif-badge" id="badge-requests"></span>
     </div>
-    <span style="font-size:10px;font-weight:600;">Social</span>
+    <span style="font-size:10px;font-weight:600;">Amigos</span>
   </button>
   <button onclick="switchSec('settings')" id="nav-settings" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;padding:6px;border:none;background:transparent;color:<?= $txt2 ?>;">
     <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:22px;height:22px;"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -585,18 +519,6 @@ const BUBBLE = '<?= addslashes($bubble_col) ?>';
 const INIT   = '<?= addslashes($init_sec) ?>';
 
 // ── SECCIÓN ────────────────────────────────────────────────────────────────
-function switchSocialTab(tab) {
-  document.getElementById('social-discover').style.display  = tab === 'discover' ? 'block' : 'none';
-  document.getElementById('social-requests').style.display  = tab === 'requests' ? 'block' : 'none';
-  const BUBBLE = '<?= addslashes($bubble_col) ?>';
-  const TXT2   = '<?= addslashes($txt2) ?>';
-  const disc = document.getElementById('stab-discover');
-  const reqs = document.getElementById('stab-requests');
-  disc.style.borderBottomColor = tab === 'discover' ? BUBBLE : 'transparent';
-  disc.style.color             = tab === 'discover' ? BUBBLE : TXT2;
-  reqs.style.borderBottomColor = tab === 'requests' ? BUBBLE : 'transparent';
-  reqs.style.color             = tab === 'requests' ? BUBBLE : TXT2;
-}
 function switchSec(sec) {
   ['chats','add','settings'].forEach(s => {
     document.getElementById('view-'+s).classList.toggle('hidden', s!==sec);
