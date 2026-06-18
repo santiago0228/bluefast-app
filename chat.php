@@ -53,9 +53,8 @@ html,body{
 #app{
   width:100%;max-width:480px;height:100dvh;
   display:flex;flex-direction:column;overflow:hidden;
-  background:#0B0B0F;
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  color:#e5e7eb;position:relative;
+  position:relative;
 }
 
 /* ── SCROLLBAR ──────────────────────────────────────────────────────── */
@@ -75,8 +74,8 @@ html,body{
   border-radius:18px 18px 4px 18px;
 }
 .bubble.them{
-  background:#1e1e28;color:#e5e7eb;
-  border-radius:18px 18px 18px 4px;border:1px solid #2a2a38;
+  background:<?= $is_light ? '#e8e8f0' : '#1e1e28' ?>;color:<?= $is_light ? '#1a1a2e' : '#e5e7eb' ?>;
+  border-radius:18px 18px 18px 4px;border:1px solid <?= $is_light ? '#d1d5db' : '#2a2a38' ?>;
 }
 
 /* ── DOBLE CHECK ───────────────────────────────────────────────────── */
@@ -153,11 +152,7 @@ html,body{
 .msg-time{font-size:10px;opacity:0.5;margin-top:3px;display:block;}
 
 /* ── HEADER ─────────────────────────────────────────────────────────── */
-#app-header{
-  background:#111118;border-bottom:1px solid #1e1e28;
-  padding:10px 12px;display:flex;align-items:center;
-  gap:10px;flex-shrink:0;position:relative;
-}
+/* #app-header: estilos en el HTML inline para respetar tema claro/oscuro */
 .icon-btn{
   width:38px;height:38px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
@@ -317,10 +312,10 @@ html,body{
 </head>
 <body>
 
-<div id="app">
+<div id="app" style="<?= $bg_style ?><?= $is_light ? 'color:#1a1a2e;' : 'color:#e5e7eb;' ?>">
 
 <!-- ═══ HEADER ════════════════════════════════════════════════════════ -->
-<header id="app-header">
+<header id="app-header" style="background:<?= $is_light ? '#ffffff' : '#111118' ?>;border-bottom:1px solid <?= $is_light ? '#e5e7eb' : '#1e1e28' ?>;padding:10px 12px;display:flex;align-items:center;gap:10px;flex-shrink:0;position:relative;">
   <a href="home.php" class="icon-btn" aria-label="Volver">
     <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg>
   </a>
@@ -1233,9 +1228,9 @@ function loadMessages() {
         let checkHtml = '';
         if(isMe) {
           if(m.leido) {
-            checkHtml = `<span class="msg-check read" title="Leído">✓✓</span>`;
+            checkHtml = `<span style="font-size:11px;margin-left:4px;color:#5bc8f5;font-weight:700;" title="Leído">✓✓</span>`;
           } else {
-            checkHtml = `<span class="msg-check sent" title="Enviado">✓</span>`;
+            checkHtml = `<span style="font-size:11px;margin-left:4px;color:rgba(255,255,255,0.5);" title="Enviado">✓</span>`;
           }
         }
         inner += `<span class="msg-time" style="text-align:${isMe?'right':'left'};">${hora}${checkHtml}</span>`;
