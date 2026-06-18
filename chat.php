@@ -22,8 +22,9 @@ if(!$partner) { header('Location: home.php'); exit; }
 
 $bubble_color = htmlspecialchars($me['bubble_color'] ?? '#18033B');
 $chat_bg      = $me['chat_bg'] ?? '';
+$is_light     = ($me['theme_mode'] ?? 'dark') === 'light';
 
-$bg_style = 'background:#0B0B0F;';
+$bg_style = $is_light ? 'background:#f5f0eb;' : 'background:#0B0B0F;';
 if($chat_bg) {
     if(strpos($chat_bg,'#')===0 || strpos($chat_bg,'rgb')===0) {
         $bg_style = "background-color:{$chat_bg};";
@@ -79,9 +80,10 @@ html,body{
 }
 
 /* ── DOBLE CHECK ───────────────────────────────────────────────────── */
+/* Colores FIJOS, nunca heredan el color de burbuja */
 .msg-check{font-size:11px;margin-left:4px;display:inline;}
-.msg-check.sent{color:rgba(255,255,255,0.4);}
-.msg-check.read{color:#a78bfa;}
+.msg-check.sent{color:rgba(255,255,255,0.45)!important;}
+.msg-check.read{color:#60d4f7!important;}  /* azul claro, visible en cualquier burbuja */
 
 /* ── MENSAJE FIJADO (barra superior) ───────────────────────────────── */
 #pinned-bar{
@@ -537,16 +539,72 @@ html,body{
   </div>
 </div>
 
-<!-- ═══ VIDEO CONTAINER ═══════════════════════════════════════════════ -->
+<!-- ═══ VIDEO / CALL CONTAINER ══════════════════════════════════════ -->
 <div id="video-container">
-  <video id="remoteVideo" autoplay playsinline style="width:100%;height:100%;object-fit:cover;background:#000;"></video>
-  <video id="localVideo"  autoplay muted playsinline style="position:absolute;top:16px;right:16px;width:100px;height:140px;object-fit:cover;border-radius:14px;border:2px solid #fff;"></video>
-  <div style="position:absolute;bottom:0;left:0;right:0;padding:32px;display:flex;justify-content:center;background:linear-gradient(transparent,rgba(0,0,0,0.7));">
-    <button onclick="endCall()" style="width:60px;height:60px;border-radius:50%;background:#ef4444;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;">
-      <svg fill="none" stroke="#fff" stroke-width="2.5" viewBox="0 0 24 24" style="width:26px;height:26px;"><path d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a16.003 16.003 0 0114 0M1 7a20.005 20.005 0 0122 0"/></svg>
-    </button>
+
+  <!-- Pantalla: llamada ENTRANTE -->
+  <div id="call-incoming" style="display:none;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:24px;padding:40px 20px;background:#0d0d14;">
+    <div style="font-size:13px;color:#a78bfa;letter-spacing:1px;font-weight:600;text-transform:uppercase;">Llamada entrante</div>
+    <img src="<?= htmlspecialchars($partner['avatar_url'] ?: 'https://ui-avatars.com/api/?name='.urlencode($partner['username']).' &background=18033B&color=fff') ?>"
+         style="width:100px;height:100px;border-radius:50%;object-fit:cover;border:3px solid #a78bfa;animation:ring 1.2s ease infinite;">
+    <div style="font-size:22px;font-weight:700;color:#fff;"><?= htmlspecialchars($partner['nombre'] ?: $partner['username']) ?></div>
+    <div style="font-size:14px;color:#888;">@<?= htmlspecialchars($partner['username']) ?></div>
+    <div style="display:flex;gap:40px;margin-top:16px;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+        <button onclick="rejectCall()" style="width:64px;height:64px;border-radius:50%;background:#ef4444;border:none;cursor:pointer;font-size:26px;display:flex;align-items:center;justify-content:center;">&#128565;</button>
+        <span style="font-size:12px;color:#ef4444;">Rechazar</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+        <button onclick="answerCall()" style="width:64px;height:64px;border-radius:50%;background:#22c55e;border:none;cursor:pointer;font-size:26px;display:flex;align-items:center;justify-content:center;">&#128222;</button>
+        <span style="font-size:12px;color:#22c55e;">Responder</span>
+      </div>
+    </div>
   </div>
+
+  <!-- Pantalla: llamada ACTIVA -->
+  <div id="call-screen" style="display:none;flex-direction:column;flex:1;position:relative;background:#0d0d14;">
+    <video id="vc-remote" autoplay playsinline style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;display:none;"></video>
+    <div id="call-audio-icon" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;">
+      <img src="<?= htmlspecialchars($partner['avatar_url'] ?: 'https://ui-avatars.com/api/?name='.urlencode($partner['username']).' &background=18033B&color=fff') ?>"
+           style="width:110px;height:110px;border-radius:50%;object-fit:cover;border:3px solid #a78bfa;">
+    </div>
+    <video id="vc-local" autoplay muted playsinline style="position:absolute;top:16px;right:16px;width:90px;height:130px;object-fit:cover;border-radius:14px;border:2px solid #fff;display:none;z-index:10;"></video>
+    <div style="position:absolute;top:0;left:0;right:0;padding:20px 16px 0;z-index:20;background:linear-gradient(to bottom,rgba(0,0,0,0.7),transparent);">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <span id="call-type-icon" style="font-size:18px;">&#128222;</span>
+        <span id="call-label" style="font-size:18px;font-weight:700;color:#fff;"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span id="call-status" style="font-size:13px;color:#aaa;"></span>
+        <span id="call-timer-txt" style="font-size:13px;color:#22c55e;font-weight:600;font-variant-numeric:tabular-nums;"></span>
+      </div>
+    </div>
+    <div style="position:absolute;bottom:0;left:0;right:0;padding:24px 20px 36px;background:linear-gradient(transparent,rgba(0,0,0,0.85));z-index:20;">
+      <div style="display:flex;justify-content:center;gap:24px;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+          <button id="btn-mute" onclick="toggleMic()" style="width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,0.15);border:none;cursor:pointer;font-size:22px;display:flex;align-items:center;justify-content:center;transition:background .2s;">&#127897;&#65039;</button>
+          <span style="font-size:11px;color:#aaa;">Micro</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+          <button onclick="endCall()" style="width:64px;height:64px;border-radius:50%;background:#ef4444;border:none;cursor:pointer;font-size:26px;display:flex;align-items:center;justify-content:center;">&#128565;</button>
+          <span style="font-size:11px;color:#ef4444;">Colgar</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+          <button id="btn-cam" onclick="toggleCam()" style="width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,0.15);border:none;cursor:pointer;font-size:22px;display:flex;align-items:center;justify-content:center;transition:background .2s;">&#128247;</button>
+          <span style="font-size:11px;color:#aaa;">Camara</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <audio id="call-audio-el" autoplay style="display:none;"></audio>
 </div>
+
+<style>
+@keyframes ring{0%,100%{box-shadow:0 0 0 0 rgba(167,139,250,0.6);}50%{box-shadow:0 0 0 20px rgba(167,139,250,0);}}
+#video-container{display:none;position:fixed;inset:0;z-index:500;flex-direction:column;max-width:480px;left:50%;transform:translateX(-50%);}
+#video-container.open{display:flex;}
+</style>
 
 <div id="toast"></div>
 
@@ -560,43 +618,171 @@ const BUBBLE  = '<?= addslashes($bubble_color) ?>';
 /* ── PEERJS ────────────────────────────────────────────────────────── */
 const _peerRandSuffix = Math.random().toString(36).slice(2,10);
 const peer = new Peer('bf_' + ME + '_' + _peerRandSuffix);
-let localStream, currentCall;
+let localStream = null, currentCall = null, callTimer = null, callSeconds = 0;
 
+// ── UI helpers de llamada ──────────────────────────────────────────
+function showCallScreen(label, withVideo, incoming = false) {
+  const cs = document.getElementById('call-screen');
+  const ci = document.getElementById('call-incoming');
+  cs.querySelector('#call-label').textContent   = label;
+  cs.querySelector('#call-status').textContent  = incoming ? 'Llamada entrante…' : 'Conectando…';
+  cs.querySelector('#call-timer-txt').textContent = '';
+  cs.querySelector('#call-type-icon').textContent = withVideo ? '📹' : '📞';
+  document.getElementById('vc-local').style.display  = withVideo ? 'block' : 'none';
+  document.getElementById('vc-remote').style.display = withVideo ? 'block' : 'none';
+  document.getElementById('call-audio-icon').style.display = withVideo ? 'none' : 'flex';
+  if(incoming) { ci.style.display = 'flex'; cs.style.display = 'none'; }
+  else         { ci.style.display = 'none'; cs.style.display = 'flex'; }
+  document.getElementById('video-container').classList.add('open');
+}
+function setCallConnected() {
+  const cs = document.getElementById('call-screen');
+  cs.querySelector('#call-status').textContent = 'Conectado';
+  callSeconds = 0;
+  clearInterval(callTimer);
+  callTimer = setInterval(() => {
+    callSeconds++;
+    const m = String(Math.floor(callSeconds/60)).padStart(2,'0');
+    const s = String(callSeconds%60).padStart(2,'0');
+    cs.querySelector('#call-timer-txt').textContent = m + ':' + s;
+  }, 1000);
+}
+function hideCallScreen() {
+  clearInterval(callTimer);
+  document.getElementById('video-container').classList.remove('open');
+  document.getElementById('call-screen').style.display   = 'none';
+  document.getElementById('call-incoming').style.display = 'none';
+}
+
+// ── PeerJS eventos ─────────────────────────────────────────────────
 peer.on('open', id => {
   const fd = new FormData(); fd.append('peer_id', id);
-  fetch('ajax.php?action=update_peer', {method:'POST',body:fd});
+  fetch('ajax.php?action=update_peer', {method:'POST', body:fd});
 });
+
+peer.on('error', err => {
+  hideCallScreen();
+  const msgs = {
+    'peer-unavailable': 'El contacto no está disponible en este momento.',
+    'network':          'Error de red. Verifica tu conexión.',
+    'browser-incompatible': 'Tu navegador no soporta llamadas WebRTC.'
+  };
+  showToast(msgs[err.type] || 'Error en la llamada: ' + err.type, 'error');
+});
+
+let incomingCall = null;
 peer.on('call', call => {
-  const tipo = call.metadata?.video ? 'videollamada' : 'llamada';
-  if(confirm(`📞 ${tipo} entrante. ¿Responder?`)) {
-    const c = call.metadata?.video ? {video:true,audio:true} : {video:false,audio:true};
-    navigator.mediaDevices.getUserMedia(c).then(stream => {
-      localStream = stream;
-      document.getElementById('localVideo').srcObject = stream;
-      document.getElementById('video-container').classList.add('open');
-      call.answer(stream); currentCall = call;
-      call.on('stream', rs => document.getElementById('remoteVideo').srcObject = rs);
-    });
-  }
+  incomingCall = call;
+  const withVideo = !!call.metadata?.video;
+  const name = '<?= addslashes(htmlspecialchars($partner['nombre'] ?: $partner['username'])) ?>';
+  showCallScreen(name, withVideo, true);
 });
-function startCall(withVideo) {
-  fetch('ajax.php?action=get_partner_info').then(r=>r.json()).then(data => {
-    if(!data || !data.peer_id) { showToast('El contacto no está disponible','error'); return; }
-    const c = {video:withVideo,audio:true};
-    navigator.mediaDevices.getUserMedia(c).then(stream => {
+
+function answerCall() {
+  if(!incomingCall) return;
+  const withVideo = !!incomingCall.metadata?.video;
+  const constraints = withVideo ? {video:true, audio:true} : {audio:true, video:false};
+  document.getElementById('call-incoming').style.display = 'none';
+  document.getElementById('call-screen').style.display   = 'flex';
+  document.getElementById('call-screen').querySelector('#call-status').textContent = 'Conectando…';
+
+  navigator.mediaDevices.getUserMedia(constraints)
+    .then(stream => {
       localStream = stream;
-      document.getElementById('localVideo').srcObject = stream;
-      document.getElementById('video-container').classList.add('open');
-      const call = peer.call(data.peer_id, stream, {metadata:{video:withVideo}});
-      currentCall = call;
-      call.on('stream', rs => document.getElementById('remoteVideo').srcObject = rs);
+      if(withVideo) document.getElementById('vc-local').srcObject = stream;
+      incomingCall.answer(stream);
+      currentCall = incomingCall;
+      currentCall.on('stream', rs => {
+        setCallConnected();
+        if(withVideo) document.getElementById('vc-remote').srcObject = rs;
+        else {
+          const a = document.getElementById('call-audio-el');
+          a.srcObject = rs; a.play().catch(()=>{});
+        }
+      });
+      currentCall.on('close', () => { showToast('Llamada finalizada'); endCall(); });
+      currentCall.on('error', () => { showToast('Error durante la llamada','error'); endCall(); });
+    })
+    .catch(err => {
+      showToast('No se pudo acceder al micrófono/cámara', 'error');
+      hideCallScreen();
     });
-  });
 }
+
+function rejectCall() {
+  if(incomingCall) { incomingCall.close(); incomingCall = null; }
+  hideCallScreen();
+}
+
+function startCall(withVideo) {
+  fetch('ajax.php?action=get_partner_info')
+    .then(r => r.json())
+    .then(data => {
+      if(!data || !data.peer_id) {
+        showToast('El contacto no está disponible ahora', 'error');
+        return;
+      }
+      const name = data.nombre || data.username || 'Contacto';
+      const constraints = withVideo ? {video:true, audio:true} : {audio:true, video:false};
+      navigator.mediaDevices.getUserMedia(constraints)
+        .then(stream => {
+          localStream = stream;
+          showCallScreen(name, withVideo, false);
+          if(withVideo) document.getElementById('vc-local').srcObject = stream;
+          const call = peer.call(data.peer_id, stream, {metadata:{video:withVideo}});
+          currentCall = call;
+          call.on('stream', rs => {
+            setCallConnected();
+            if(withVideo) document.getElementById('vc-remote').srcObject = rs;
+            else {
+              const a = document.getElementById('call-audio-el');
+              a.srcObject = rs; a.play().catch(()=>{});
+            }
+          });
+          call.on('close', () => { showToast('Llamada finalizada'); endCall(); });
+          call.on('error', () => { showToast('Error durante la llamada','error'); endCall(); });
+          // Timeout si no responde en 30s
+          setTimeout(() => {
+            if(currentCall && document.getElementById('call-screen').querySelector('#call-status').textContent === 'Conectando…') {
+              showToast('Sin respuesta', 'error');
+              endCall();
+            }
+          }, 30000);
+        })
+        .catch(err => {
+          const msg = err.name === 'NotAllowedError'
+            ? 'Permiso de ' + (withVideo?'cámara/':'') + 'micrófono denegado'
+            : 'No se pudo acceder al dispositivo';
+          showToast(msg, 'error');
+        });
+    })
+    .catch(() => showToast('Error de conexión', 'error'));
+}
+
+let micMuted = false, camOff = false;
+function toggleMic() {
+  if(!localStream) return;
+  micMuted = !micMuted;
+  localStream.getAudioTracks().forEach(t => t.enabled = !micMuted);
+  document.getElementById('btn-mute').textContent = micMuted ? '🎙️✕' : '🎙️';
+  document.getElementById('btn-mute').style.background = micMuted ? 'rgba(239,68,68,0.7)' : 'rgba(255,255,255,0.15)';
+}
+function toggleCam() {
+  if(!localStream) return;
+  camOff = !camOff;
+  localStream.getVideoTracks().forEach(t => t.enabled = !camOff);
+  document.getElementById('btn-cam').textContent = camOff ? '📷✕' : '📷';
+  document.getElementById('btn-cam').style.background = camOff ? 'rgba(239,68,68,0.7)' : 'rgba(255,255,255,0.15)';
+}
+
 function endCall() {
-  if(currentCall) currentCall.close();
-  if(localStream) localStream.getTracks().forEach(t=>t.stop());
-  document.getElementById('video-container').classList.remove('open');
+  if(currentCall) { currentCall.close(); currentCall = null; }
+  if(incomingCall){ incomingCall.close(); incomingCall = null; }
+  if(localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  const a = document.getElementById('call-audio-el');
+  if(a) { a.srcObject = null; }
+  micMuted = false; camOff = false;
+  hideCallScreen();
 }
 
 /* ── INFO MODAL ────────────────────────────────────────────────────── */
@@ -1019,15 +1205,19 @@ function loadMessages() {
 
       if(m.contenido) inner += `<div>${escHtml(m.contenido)}</div>`;
 
-      function tipoByUrl(url) {
-        if(!url) return '';
+      function tipoByUrl(url, tipoDb) {
+        if(!url) return tipoDb || '';
         const ext = (url.split('.').pop()||'').toLowerCase().split('?')[0];
+        // Si la BD ya dice 'audio', respetarlo siempre (webm puede ser audio o video)
+        if(tipoDb === 'audio') return 'audio';
         if(['jpg','jpeg','png','webp','gif'].includes(ext)) return 'imagen';
-        if(['mp4','webm','mov'].includes(ext))              return 'video';
+        if(['mp4','mov'].includes(ext))                     return 'video';
         if(['mp3','ogg','m4a'].includes(ext))               return 'audio';
+        // webm: solo es video si BD lo dice explícitamente, si no asumir audio (grabaciones del micro)
+        if(ext === 'webm') return (tipoDb === 'video') ? 'video' : 'audio';
         return 'archivo';
       }
-      const tipo = m.tipo || tipoByUrl(m.archivo_url);
+      const tipo = tipoByUrl(m.archivo_url, m.tipo);
 
       if(tipo==='imagen'||tipo==='image') {
         inner += `<img src="${escAttr(m.archivo_url)}" style="max-width:100%;border-radius:10px;margin-top:6px;cursor:pointer;display:block;" onclick="window.open('${escAttr(m.archivo_url)}')">`;
